@@ -1,0 +1,46 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Next.js
+.next
+out
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+venv
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.agenttrace/traces/*
+!.agenttrace/traces/.gitkeep
+
+# Env
+.env
+.env.local
+.env.*.local
+sdk.env
+
+# Build
+build
+dist
+*.egg-info
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Turborepo
+.turbo

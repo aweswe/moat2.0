@@ -1,0 +1,15 @@
+# Auto-generated fix: Correct malformed tool call
+# Reason: Tool call failure or invalid tool payload
+
+# === AFE_PATCH:TOOL_CALL_FIX ===
+def sanitize_tool_payload(payload):
+    """
+    Sanitizes tool payload to ensure it is valid JSON for LLM tool calling.
+    """
+    # Remove trailing commas, fix quotes, basic normalization
+    cleaned = str(payload).replace("'", '"')
+    cleaned = cleaned.replace(",}", "}")
+    cleaned = cleaned.replace(",]", "]")
+
+    return cleaned
+# === END AFE_PATCH:TOOL_CALL_FIX ===

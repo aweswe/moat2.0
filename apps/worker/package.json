@@ -1,0 +1,22 @@
+{
+    "name": "@agenttrace/worker",
+    "version": "1.0.0",
+    "main": "dist/index.js",
+    "scripts": {
+        "dev": "ts-node src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.48.1",
+        "dotenv": "^16.4.7",
+        "groq-sdk": "^0.37.0",
+        "node-fetch": "^2.7.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.17.17",
+        "@types/node-fetch": "^2.6.11",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.7.3"
+    }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "agenttrace",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "dev:web": "turbo dev --filter=@agenttrace/web",
+    "dev:worker": "turbo dev --filter=@agenttrace/worker",
+    "build:web": "turbo build --filter=@agenttrace/web",
+    "build:worker": "turbo build --filter=@agenttrace/worker"
+  },
+  "devDependencies": {
+    "dotenv": "^17.3.1",
+    "pg": "^8.18.0",
+    "turbo": "^2.5.0"
+  },
+  "packageManager": "npm@10.0.0"
+}

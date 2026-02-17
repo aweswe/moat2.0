@@ -1,0 +1,11 @@
+# Auto-generated fix: Rewrite prompt to avoid safety refusal
+# Reason: Model refused task due to safety phrasing
+
+# === AFE_PATCH:PROMPT_REFUSAL_FIX ===
+def rewrite_prompt_for_safety(original_prompt):
+    """
+    Rewrites user prompt to avoid triggering model refusal.
+    """
+    return f"Rephrase task safely: {original_prompt}. \
+Please ensure compliance while providing helpful information."
+# === END AFE_PATCH:PROMPT_REFUSAL_FIX ===

@@ -1,0 +1,26 @@
+# Auto-generated fix: Add exponential backoff retry logic
+# Reason: Rate limit exceeded. Wait time: {{ wait_time }} seconds
+
+# === AFE_PATCH:RATE_LIMIT_BACKOFF ===
+import time
+import random
+
+def {{ function_name }}(*args, **kwargs):
+    """
+    Wrapped API call with exponential backoff to avoid rate limit errors.
+    """
+    max_retries = 5
+    base_delay = {{ wait_time }}
+
+    for attempt in range(max_retries):
+        try:
+            return original_{{ function_name }}(*args, **kwargs)
+        except Exception as e:
+            if "rate limit" not in str(e).lower():
+                raise  # Not a rate limit issue
+
+            delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+            time.sleep(delay)
+
+    raise Exception("API call failed after repeated rate limit retries")
+# === END AFE_PATCH:RATE_LIMIT_BACKOFF ===
