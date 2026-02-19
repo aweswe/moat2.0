@@ -5,19 +5,17 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Terminal, Shield, Zap, Mail, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
+import { Terminal, Shield, Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
-export default function SignupPage() {
-    const { signUp, user } = useAuth();
+export default function LoginPage() {
+    const { signIn, user } = useAuth();
     const router = useRouter();
-    const [name, setName] = React.useState("");
     const [email, setEmail] = React.useState("");
     const [password, setPassword] = React.useState("");
     const [showPassword, setShowPassword] = React.useState(false);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [error, setError] = React.useState("");
-    const [success, setSuccess] = React.useState(false);
 
     // Redirect if already logged in
     React.useEffect(() => {
@@ -26,46 +24,18 @@ export default function SignupPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!email || !password || !name) return;
-        if (password.length < 6) {
-            setError("Password must be at least 6 characters.");
-            return;
-        }
+        if (!email || !password) return;
 
         setIsSubmitting(true);
         setError("");
 
-        const result = await signUp(email, password, name);
+        const result = await signIn(email, password);
         if (result.error) {
             setError(result.error);
-        } else {
-            setSuccess(true);
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
+        // On success, onAuthStateChange will handle redirect
     };
-
-    if (success) {
-        // Email confirmation is disabled — auth listener will set user → redirect to /dashboard
-        return (
-            <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-background to-background">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="w-full max-w-md text-center"
-                >
-                    <div className="bg-card border border-border rounded-2xl p-10 shadow-xl">
-                        <div className="w-16 h-16 rounded-xl bg-brand/10 border border-brand/30 flex items-center justify-center mx-auto mb-6">
-                            <Loader2 className="w-8 h-8 text-brand animate-spin" />
-                        </div>
-                        <h2 className="text-2xl font-bold tracking-tight mb-2">Setting Up Workspace</h2>
-                        <p className="text-muted-foreground text-sm">
-                            Creating your organization and redirecting...
-                        </p>
-                    </div>
-                </motion.div>
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-background to-background">
@@ -83,8 +53,8 @@ export default function SignupPage() {
                             AgentTrace
                         </span>
                     </Link>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2">Create Account</h1>
-                    <p className="text-muted-foreground">Start observing your AI agents with full determinism.</p>
+                    <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome Back</h1>
+                    <p className="text-muted-foreground">Sign in to your workspace.</p>
                 </div>
 
                 <div className="bg-card border border-border rounded-2xl p-8 shadow-xl">
@@ -94,21 +64,6 @@ export default function SignupPage() {
                                 {error}
                             </div>
                         )}
-
-                        <div className="space-y-2">
-                            <label className="text-xs font-mono uppercase tracking-widest text-muted-foreground ml-1">Full Name</label>
-                            <div className="relative group">
-                                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-brand transition-colors" />
-                                <input
-                                    type="text"
-                                    required
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="Jane Doe"
-                                    className="w-full bg-background border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand/50 transition-all font-mono"
-                                />
-                            </div>
-                        </div>
 
                         <div className="space-y-2">
                             <label className="text-xs font-mono uppercase tracking-widest text-muted-foreground ml-1">Email</label>
@@ -132,10 +87,9 @@ export default function SignupPage() {
                                 <input
                                     type={showPassword ? "text" : "password"}
                                     required
-                                    minLength={6}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Min 6 characters"
+                                    placeholder="••••••••"
                                     className="w-full bg-background border border-border rounded-lg pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand/50 transition-all font-mono"
                                 />
                                 <button
@@ -150,23 +104,23 @@ export default function SignupPage() {
 
                         <Button
                             type="submit"
-                            disabled={isSubmitting || !email || !password || !name}
+                            disabled={isSubmitting || !email || !password}
                             className="w-full bg-foreground text-background hover:bg-foreground/90 font-bold tracking-wide h-11"
                         >
                             {isSubmitting ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Creating Account...
+                                    Authenticating...
                                 </>
                             ) : (
-                                "Create Account"
+                                "Sign In"
                             )}
                         </Button>
 
                         <div className="text-center pt-2">
-                            <span className="text-muted-foreground text-xs">Already have an account? </span>
-                            <Link href="/login" className="text-brand text-xs font-semibold hover:underline">
-                                Sign in
+                            <span className="text-muted-foreground text-xs">Don't have an account? </span>
+                            <Link href="/signup" className="text-brand text-xs font-semibold hover:underline">
+                                Create one
                             </Link>
                         </div>
 
@@ -179,12 +133,12 @@ export default function SignupPage() {
 
                 <div className="mt-8 flex justify-center gap-8 text-muted-foreground">
                     <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-brand" />
-                        <span className="text-xs font-medium">Deterministic</span>
+                        <Shield className="w-4 h-4 text-brand" />
+                        <span className="text-xs font-medium">Encrypted</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <Shield className="w-4 h-4 text-brand" />
-                        <span className="text-xs font-medium">Full_Control</span>
+                        <span className="text-xs font-medium">SOC2_Ready</span>
                     </div>
                 </div>
             </motion.div>

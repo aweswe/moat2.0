@@ -21,6 +21,8 @@ export default function ScriptViewer({ traceId, highlightLine, className }: Scri
         async function fetchScript() {
             setLoading(true);
             setError(null);
+
+            // Try the /api/trace/script endpoint (Storage-based, Python SDK only)
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 const res = await fetch(`/api/trace/script?traceId=${traceId}`, {
@@ -28,17 +30,21 @@ export default function ScriptViewer({ traceId, highlightLine, className }: Scri
                         "Authorization": `Bearer ${session?.access_token || ""}`
                     }
                 });
-                const data = await res.json();
-                if (res.ok && data.script) {
-                    setScript(data.script);
-                } else {
-                    setError(data.error || "No script found");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.script) {
+                        setScript(data.script);
+                        setLoading(false);
+                        return;
+                    }
                 }
-            } catch (err: any) {
-                setError(err.message || "Failed to fetch script");
-            } finally {
-                setLoading(false);
+            } catch {
+                // Storage endpoint not available
             }
+
+            // No source code — this is normal for API-ingested traces
+            setError("Source code not included in this trace. Upload via SDK or CLI.");
+            setLoading(false);
         }
         fetchScript();
     }, [traceId]);
@@ -63,7 +69,7 @@ export default function ScriptViewer({ traceId, highlightLine, className }: Scri
         return (
             <div className={cn("text-center py-12 px-4 border-2 border-dashed border-border rounded-xl opacity-40", className)}>
                 <FileCode2 className="w-6 h-6 mx-auto mb-2 opacity-40" />
-                <div className="text-xs font-mono mb-1">SCRIPT_NOT_FOUND</div>
+                <div className="text-xs font-mono mb-1">NO_SOURCE_CODE</div>
                 <p className="text-[10px] text-muted-foreground italic">
                     {error || "No Python source was uploaded for this trace."}
                 </p>

@@ -96,18 +96,19 @@ export async function POST(req: Request) {
         }
 
         const supabase = supabaseAdmin;
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('organization_id')
+        const { data: membership, error: memberError } = await supabase
+            .from('org_members')
+            .select('org_id')
             .eq('user_id', user.id)
+            .limit(1)
             .single();
 
-        if (profileError || !profile?.organization_id) {
-            console.error("[API /replay] Profile lookup failed for user:", user.id, profileError?.message);
+        if (memberError || !membership?.org_id) {
+            console.error("[API /replay] Membership lookup failed for user:", user.id, memberError?.message);
             return NextResponse.json({ error: "No organization access" }, { status: 403 });
         }
 
-        console.log(`[API /replay] Auth success: ${user.email} (Org: ${profile.organization_id})`);
+        console.log(`[API /replay] Auth success: ${user.email} (Org: ${membership.org_id})`);
 
         // 2. Verify traceId belongs to this org (Stealth 404)
         const { data: trace } = await supabase
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
             .eq('id', traceId)
             .single();
 
-        if (!trace || trace.org_id !== profile.organization_id) {
+        if (!trace || trace.org_id !== membership.org_id) {
             return NextResponse.json({ error: "Trace not found" }, { status: 404 });
         }
 
@@ -131,6 +132,31 @@ export async function POST(req: Request) {
         console.log("[API /replay] Running replay_handler.py with args:", args);
         const result = await runPythonHelper("replay_handler.py", args);
 
+        // Normalize events to match the format from /api/trace/events
+        // The replay handler returns raw events with inconsistent field names
+        // (event_type vs type) and data at top level instead of in a payload wrapper.
+        const normalizedEvents = (result.events || []).map((e: any) => {
+            const seq = e.seq ?? e.step ?? 0;
+            const type = e.type ?? e.event_type ?? "unknown";
+            const timestamp = e.timestamp ?? null;
+            const branched = e._branched ?? false;
+
+            // Extract payload: prefer explicit payload field, otherwise
+            // collect all non-meta fields as the payload
+            let payload = e.payload;
+            if (payload === undefined || payload === null) {
+                const metaKeys = new Set(["seq", "step", "type", "event_type", "timestamp", "_branched"]);
+                payload = {} as Record<string, any>;
+                for (const [k, v] of Object.entries(e)) {
+                    if (!metaKeys.has(k)) {
+                        (payload as Record<string, any>)[k] = v;
+                    }
+                }
+            }
+
+            return { seq, type, payload, timestamp, _branched: branched };
+        });
+
         return NextResponse.json({
             success: true,
             traceId: result.traceId,
@@ -138,7 +164,7 @@ export async function POST(req: Request) {
             step: result.step ?? null,
             maxStep: result.maxStep,
             eventCount: result.eventCount,
-            events: result.events,
+            events: normalizedEvents,
             state: result.state,
             parentHash: result.parentHash,
             metadata: result.metadata,

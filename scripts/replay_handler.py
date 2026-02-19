@@ -103,6 +103,51 @@ def load_events_local(trace_id: str) -> list:
     return events
 
 
+def download_events_from_db(trace_id: str) -> list:
+    """Fallback: fetch events from the trace_events DB table (API-ingested traces)."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        resp = client.table("trace_events").select("*").eq("trace_id", trace_id).order("seq").execute()
+        if resp.data:
+            events = []
+            for row in resp.data:
+                # DB schema: seq (int), timestamp (timestamptz), type (text), payload (jsonb)
+                evt = {
+                    "seq": row.get("seq", 0),
+                    "type": row.get("type") or row.get("event_type", "unknown"),
+                    "timestamp": row.get("timestamp"),
+                    "payload": row.get("payload") or row.get("event_data") or {},
+                }
+                events.append(evt)
+            return events
+    except Exception as e:
+        print(f"[replay] DB event fallback failed: {e}", file=sys.stderr)
+    return []
+
+
+def download_metadata_from_db(trace_id: str) -> dict:
+    """Fallback: build metadata from the traces table (API-ingested traces)."""
+    client = get_supabase_client()
+    if not client:
+        return {}
+    try:
+        resp = client.table("traces").select("*").eq("id", trace_id).single().execute()
+        if resp.data:
+            row = resp.data
+            return {
+                "title": row.get("name") or row.get("title", ""),
+                "source": row.get("source", "api"),
+                "status": row.get("status", "completed"),
+                "runtime": row.get("runtime", "Python_3.x"),
+                "created_at": row.get("created_at"),
+            }
+    except Exception:
+        pass
+    return {}
+
+
 def apply_branch_overrides(events: list, branch_id: str) -> list:
     """Load branch overrides and apply them to the events list."""
     overrides = {}
@@ -187,10 +232,15 @@ def main():
     load_env()
 
     try:
-        # 1. Load events (local first, then cloud)
+        # 1. Load events (local → Storage → DB table)
         events = load_events_local(args.trace_id)
         if not events:
-            events = download_events_from_supabase(args.trace_id)
+            try:
+                events = download_events_from_supabase(args.trace_id)
+            except Exception as storage_err:
+                print(f"[replay] Storage download failed, trying DB: {storage_err}", file=sys.stderr)
+        if not events:
+            events = download_events_from_db(args.trace_id)
 
         if not events:
             print(json.dumps({"success": False, "error": f"No events found for trace {args.trace_id}"}))
@@ -217,8 +267,10 @@ def main():
         # 6. Compute parent hash (for branch diff)
         parent_hash = compute_events_hash(events, target_step)
 
-        # 7. Download metadata
+        # 7. Download metadata (Storage → DB fallback)
         metadata = download_metadata_from_supabase(args.trace_id)
+        if not metadata:
+            metadata = download_metadata_from_db(args.trace_id)
 
         result = {
             "success": True,

@@ -46,7 +46,7 @@ def get_supabase_client():
 
 
 def download_events(trace_id: str) -> list:
-    """Download events.jsonl - local first, then cloud."""
+    """Download events - local first, then Storage, then DB table."""
     local_path = PROJECT_ROOT / ".agenttrace" / "traces" / trace_id / "events.jsonl"
     if local_path.exists():
         events = []
@@ -61,23 +61,44 @@ def download_events(trace_id: str) -> list:
         events.sort(key=lambda e: e.get("seq", e.get("step", 0)))
         return events
 
-    # Cloud download
+    # Cloud Storage download
     client = get_supabase_client()
-    blob = client.storage.from_("traces").download(f"{trace_id}/events.jsonl")
-    if not blob:
-        raise FileNotFoundError(f"No events.jsonl found for trace {trace_id}")
-    text = blob.decode("utf-8") if isinstance(blob, (bytes, bytearray)) else blob
+    try:
+        blob = client.storage.from_("traces").download(f"{trace_id}/events.jsonl")
+        if blob:
+            text = blob.decode("utf-8") if isinstance(blob, (bytes, bytearray)) else blob
+            events = []
+            for line in text.splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        events.append(json.loads(line))
+                    except Exception:
+                        continue
+            events.sort(key=lambda e: e.get("seq", e.get("step", 0)))
+            if events:
+                return events
+    except Exception as e:
+        print(f"[branch_handler] Storage download failed, trying DB: {e}", file=sys.stderr)
 
-    events = []
-    for line in text.splitlines():
-        line = line.strip()
-        if line:
-            try:
-                events.append(json.loads(line))
-            except Exception:
-                continue
-    events.sort(key=lambda e: e.get("seq", e.get("step", 0)))
-    return events
+    # DB table fallback (API-ingested traces)
+    try:
+        resp = client.table("trace_events").select("*").eq("trace_id", trace_id).order("seq").execute()
+        if resp.data:
+            events = []
+            for row in resp.data:
+                evt = row.get("event_data") or {}
+                if isinstance(evt, str):
+                    evt = json.loads(evt)
+                evt["seq"] = row.get("seq", 0)
+                evt["event_type"] = evt.get("event_type") or row.get("event_type", "unknown")
+                evt["timestamp"] = evt.get("timestamp") or row.get("timestamp")
+                events.append(evt)
+            return events
+    except Exception as e:
+        print(f"[branch_handler] DB event fallback failed: {e}", file=sys.stderr)
+
+    raise FileNotFoundError(f"No events found for trace {trace_id} (tried local, Storage, DB)")
 
 
 def compute_hash(events: list, up_to_step: int) -> str:
@@ -124,9 +145,9 @@ def cmd_create(args):
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON override: {e}")
 
-    # Generate branch ID
+    # Generate branch ID (must be a valid UUID for the DB column)
     branch_name = args.name or f"fork-step-{args.fork_step}"
-    branch_id = f"{args.trace_id[:8]}-branch-{str(uuid.uuid4())[:8]}"
+    branch_id = str(uuid.uuid4())
 
     # Get fork events (for the branch record context)
     fork_events = [e for e in events if e.get("seq", e.get("step", 0)) <= args.fork_step]
@@ -141,15 +162,15 @@ def cmd_create(args):
     overrides_payload["_fork_events_count"] = len(fork_events)
 
     branch_record = {
-        # Do NOT include 'id' — Supabase generates a UUID automatically
-        "trace_id": args.trace_id,
+        "id": branch_id,                     # TEXT PRIMARY KEY — must be provided
+        "trace_id": args.trace_id,            # matches DB column name
         "fork_step": args.fork_step,
         "name": branch_name,
-        "overrides": overrides_payload,
+        "overrides": overrides_payload,       # matches DB column name
     }
 
     saved_to_cloud = False
-    cloud_branch_id = branch_id  # fallback
+    cloud_branch_id = branch_id
     try:
         client = get_supabase_client()
 
@@ -161,7 +182,7 @@ def cmd_create(args):
 
         result = client.table("branches").insert(branch_record).execute()
         if result.data:
-            cloud_branch_id = result.data[0]["id"]  # use the auto-generated UUID
+            cloud_branch_id = result.data[0]["id"]
         saved_to_cloud = True
     except Exception as e:
         print(f"[branch_handler] Supabase insert error: {e}", file=sys.stderr)
@@ -207,7 +228,7 @@ def cmd_list(args):
                 try:
                     with open(f) as fp:
                         data = json.load(fp)
-                    if args.trace_id and data.get("parent_trace_id") != args.trace_id:
+                    if args.trace_id and data.get("trace_id") != args.trace_id:
                         continue
                     branches.append(data)
                 except Exception:

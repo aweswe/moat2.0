@@ -143,41 +143,34 @@ export function useTrace(traceId: string) {
     const { user } = useAuth();
 
     React.useEffect(() => {
-        if (!traceId) return;
+        if (!traceId || !user) return;
 
         const fetchTrace = async () => {
-            if (!user?.organizationId) return;
-
-            // 1. Fetch Trace Record (Filtered by org_id for security)
-            const { data: traceData, error: traceError } = await supabase
-                .from('traces')
-                .select('*')
-                .eq('id', traceId)
-                .eq('org_id', user.organizationId)
-                .single();
-
-            if (traceError) {
-                console.error("Error fetching trace:", traceError);
-                setLoading(false);
-                return;
-            }
-            setTrace(traceData);
-
-            // 2. Fetch Metadata (Script Content)
             try {
-                const { data: metaData, error: metaError } = await supabase.storage
-                    .from('traces')
-                    .download(`${traceId}/metadata.json`);
-
-                if (!metaError && metaData) {
-                    const text = await metaData.text();
-                    setMetadata(JSON.parse(text));
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session?.access_token) {
+                    setLoading(false);
+                    return;
                 }
-            } catch (e) {
-                console.warn("Failed to fetch metadata.json", e);
-            }
 
-            setLoading(false);
+                const res = await fetch(`/api/trace/${traceId}`, {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` },
+                });
+
+                if (!res.ok) {
+                    console.error('[useTrace] API error:', res.status);
+                    setLoading(false);
+                    return;
+                }
+
+                const { trace: traceData, metadata: meta } = await res.json();
+                setTrace(traceData);
+                setMetadata(meta);
+            } catch (err) {
+                console.error('[useTrace] Fetch failed:', err);
+            } finally {
+                setLoading(false);
+            }
         };
 
         fetchTrace();
@@ -249,9 +242,9 @@ export function useMembers(orgId: string | null | undefined) {
 
         const fetchMembers = async () => {
             const { data, error } = await supabase
-                .from('profiles')
+                .from('org_members')
                 .select('*')
-                .eq('organization_id', orgId);
+                .eq('org_id', orgId);
 
             if (!error) setMembers(data || []);
             setLoading(false);
@@ -268,30 +261,22 @@ export function useTraceEvents(traceId: string | null | undefined) {
 
     const fetchEvents = React.useCallback(async (id: string) => {
         try {
-            const { data, error } = await supabase.storage
-                .from('traces')
-                .download(`${id}/events.jsonl`);
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) return [];
 
-            if (error) {
-                console.warn(`Failed to fetch events.jsonl for ${id}:`, error);
+            const res = await fetch(`/api/trace/events?traceId=${id}`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` },
+            });
+
+            if (!res.ok) {
+                console.error('[useTraceEvents] API error:', res.status);
                 return [];
-            } else if (data) {
-                const text = await data.text();
-                return text
-                    .split('\n')
-                    .filter((line: string) => line.trim())
-                    .map((line: string) => {
-                        try {
-                            return JSON.parse(line);
-                        } catch (e) {
-                            return null;
-                        }
-                    })
-                    .filter(Boolean);
             }
-            return [];
-        } catch (e) {
-            console.error(`Error loading trace events for ${id}:`, e);
+
+            const { events: evts } = await res.json();
+            return evts || [];
+        } catch (err) {
+            console.error('[useTraceEvents] Fetch failed:', err);
             return [];
         }
     }, []);

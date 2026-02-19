@@ -12,19 +12,21 @@ export const supabase = (typeof window !== "undefined")
     ? (window as any)._supabaseInstance || ((window as any)._supabaseInstance = createClient(supabaseUrl, supabaseAnonKey))
     : createClient(supabaseUrl, supabaseAnonKey);
 
-// Admin client for backend tasks
+// Admin client — server-side only (API routes).
+// On the browser this is null; client code must never import supabaseAdmin.
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-if (typeof window === "undefined") {
-    if (!supabaseServiceRoleKey) {
-        console.warn("[supabase] SUPABASE_SERVICE_ROLE_KEY is missing! Admin tasks will fail RLS.");
-    }
-}
-
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey || supabaseAnonKey, {
-    auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false
-    }
-});
+export const supabaseAdmin = typeof window === 'undefined'
+    ? (() => {
+        if (!supabaseServiceRoleKey) {
+            console.warn("[supabase] SUPABASE_SERVICE_ROLE_KEY is missing! Admin tasks will fail RLS.");
+        }
+        return createClient(supabaseUrl, supabaseServiceRoleKey || supabaseAnonKey, {
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false,
+                detectSessionInUrl: false
+            }
+        });
+    })()
+    : null as any;
 

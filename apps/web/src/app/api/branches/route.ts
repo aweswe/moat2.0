@@ -86,16 +86,17 @@ export async function GET(req: Request) {
 
         if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        // Get user's profile/org
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('organization_id')
+        // Get user's org via org_members
+        const { data: membership } = await supabase
+            .from('org_members')
+            .select('org_id')
             .eq('user_id', user.id)
+            .limit(1)
             .single();
 
-        if (!profile?.organization_id) return NextResponse.json({ error: "No organization found" }, { status: 403 });
+        if (!membership?.org_id) return NextResponse.json({ error: "No organization found" }, { status: 403 });
 
-        const orgId = profile.organization_id;
+        const orgId = membership.org_id;
 
         // 2. If traceId provided, verify it belongs to this org
         if (traceId) {
@@ -134,12 +135,12 @@ export async function GET(req: Request) {
         // Normalize to camelCase for frontend, matching real schema
         const branches = (data || []).map((b: any) => ({
             id: b.id,
-            parentTraceId: b.trace_id,                        // real column: trace_id
+            parentTraceId: b.trace_id,
             forkStep: b.fork_step,
             name: b.name,
-            parentHash: b.overrides?._parent_hash ?? null,    // stored inside overrides JSONB
+            parentHash: b.overrides?._parent_hash ?? null,
             createdAt: b.created_at,
-            overridePayload: b.overrides?._override ?? null,  // real column: overrides
+            overridePayload: b.overrides?._override ?? null,
         }));
 
         return NextResponse.json({ branches });
@@ -182,18 +183,19 @@ export async function POST(req: Request) {
         }
 
         const supabase = supabaseAdmin;
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('organization_id')
+        const { data: membership, error: memberError } = await supabase
+            .from('org_members')
+            .select('org_id')
             .eq('user_id', user.id)
+            .limit(1)
             .single();
 
-        if (profileError || !profile?.organization_id) {
-            console.error("[API /branches POST] Profile lookup failed:", profileError?.message);
+        if (memberError || !membership?.org_id) {
+            console.error("[API /branches POST] Membership lookup failed:", memberError?.message);
             return NextResponse.json({ error: "No organization access" }, { status: 403 });
         }
 
-        console.log(`[API /branches POST] Auth success: ${user.email} (Org: ${profile.organization_id})`);
+        console.log(`[API /branches POST] Auth success: ${user.email} (Org: ${membership.org_id})`);
 
         // 2. Verify traceId belongs to this org
         const { data: trace } = await supabase
@@ -202,7 +204,7 @@ export async function POST(req: Request) {
             .eq('id', traceId)
             .single();
 
-        if (!trace || trace.org_id !== profile.organization_id) {
+        if (!trace || trace.org_id !== membership.org_id) {
             return NextResponse.json({ error: "Trace not found" }, { status: 404 });
         }
 

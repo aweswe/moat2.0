@@ -35,12 +35,34 @@ interface DiffRow {
     missingInBranch: boolean;
 }
 
+/** Normalize an event to a consistent shape regardless of source format. */
+function normalizeEvent(e: TraceEvent): TraceEvent {
+    return {
+        seq: e.seq ?? (e as any).step ?? 0,
+        type: e.type ?? (e as any).event_type ?? "unknown",
+        payload: e.payload ?? (() => {
+            const metaKeys = new Set(["seq", "step", "type", "event_type", "timestamp", "_branched"]);
+            const p: Record<string, any> = {};
+            for (const [k, v] of Object.entries(e)) {
+                if (!metaKeys.has(k)) p[k] = v;
+            }
+            return Object.keys(p).length > 0 ? p : null;
+        })(),
+        timestamp: e.timestamp,
+        _branched: e._branched,
+    };
+}
+
 function computeDiff(baseEvents: TraceEvent[], branchEvents: TraceEvent[], forkStep: number): DiffRow[] {
     const rows: DiffRow[] = [];
 
+    // Normalize both event arrays to a consistent shape
+    const normalizedBase = baseEvents.map(normalizeEvent);
+    const normalizedBranch = branchEvents.map(normalizeEvent);
+
     // Only diff events AFTER the fork point
-    const baseAfter = baseEvents.filter(e => e.seq > forkStep);
-    const branchAfter = branchEvents.filter(e => e.seq > forkStep);
+    const baseAfter = normalizedBase.filter(e => e.seq > forkStep);
+    const branchAfter = normalizedBranch.filter(e => e.seq > forkStep);
 
     const maxLen = Math.max(baseAfter.length, branchAfter.length);
 

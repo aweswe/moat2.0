@@ -29,14 +29,15 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // 2. Org isolation
-        const { data: profile } = await supabaseAdmin
-            .from('profiles')
-            .select('organization_id')
+        // 2. Org isolation via org_members
+        const { data: membership } = await supabaseAdmin
+            .from('org_members')
+            .select('org_id')
             .eq('user_id', user.id)
+            .limit(1)
             .single();
 
-        if (!profile?.organization_id) {
+        if (!membership?.org_id) {
             return NextResponse.json({ error: "No organization found" }, { status: 403 });
         }
 
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
             .from('traces')
             .select('id')
             .eq('id', traceId)
-            .eq('org_id', profile.organization_id)
+            .eq('org_id', membership.org_id)
             .single();
 
         if (!trace) {

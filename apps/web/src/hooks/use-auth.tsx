@@ -8,14 +8,15 @@ interface User {
     id: string;
     email: string;
     name: string;
-    organizationId?: string | null;
+    organizationId: string;
     role: 'owner' | 'dev' | 'viewer';
 }
 
 interface AuthContextType {
     user: User | null;
     loading: boolean;
-    signIn: (email: string) => Promise<void>;
+    signUp: (email: string, password: string, name: string) => Promise<{ error?: string }>;
+    signIn: (email: string, password: string) => Promise<{ error?: string }>;
     signOut: () => Promise<void>;
     hasPermission: (action: 'view_traces' | 'create_branch' | 'invite_member' | 'delete_trace') => boolean;
 }
@@ -27,20 +28,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = React.useState(true);
     const router = useRouter();
 
+    const processedUserIdRef = React.useRef<string | null>(null);
+
     React.useEffect(() => {
         let mounted = true;
 
         const handleAuthChange = async (session: any) => {
             if (!mounted) return;
-
             try {
                 if (session?.user) {
-                    // Only map if we don't already have this user
-                    // This prevents loop if session updates with same user
-                    // WE REMOVED THE CHECK to ensure profile updates are caught, 
-                    // but we should probably check if ID changed to avoid "loop" of updates.
-                    // For now, let's just do it but safeguard the loading state.
-                    await mapSupabaseUser(session.user);
+                    await mapSupabaseUser(session.user, session.access_token);
                 } else {
                     setUser(null);
                 }
@@ -51,19 +48,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         };
 
-        // 1. Get initial session immediately to avoid flicker
+        // Get initial session
         supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
             handleAuthChange(session);
         });
 
-        // 2. Listen for auth changes
+        // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
-            // Note: onAuthStateChange might fire INITIAL_SESSION immediately too, 
-            // causing double-fire. But mapSupabaseUser should be idempotent enough 
-            // or we can debounce.
-            // For the "Loop" issue, we must ensure we don't trigger a state update that 
-            // causes a re-render that causes a new subscription.
             console.log("[Auth] Event:", _event);
+            if (_event === 'SIGNED_OUT') {
+                processedUserIdRef.current = null;
+                setUser(null);
+                return;
+            }
             handleAuthChange(session);
         });
 
@@ -73,116 +70,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
-    const processedUserIdRef = React.useRef<string | null>(null);
-
-    const mapSupabaseUser = async (sbUser: SupabaseUser) => {
-        // Prevent loops: If we just processed this user, skip.
+    const mapSupabaseUser = async (sbUser: SupabaseUser, accessToken: string) => {
         if (processedUserIdRef.current === sbUser.id) {
-            console.log("[Auth] User already processed, skipping map:", sbUser.id);
-            // Ensure loading is false even if we skip
             return;
         }
 
         try {
             const email = sbUser.email || '';
-            const id = sbUser.id;
-            console.log("[Auth] Mapping user:", email, "UID:", id);
+            console.log("[Auth] Setting up user:", email);
 
-            // Ensure Profile exists and is linked to Org
-            // Using .limit(1) instead of .single() to avoid 406 noise if profile doesn't exist
-            const { data: profiles, error: fetchError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('user_id', id)
-                .limit(1);
+            // Call server-side API (uses service role key, bypasses RLS)
+            const res = await fetch('/api/auth/setup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
 
-            if (fetchError) {
-                console.error("[Auth] Fetch error:", fetchError.message);
+            const data = await res.json();
+
+            if (!res.ok) {
+                console.error("[Auth] Setup API failed:", data.error);
+                setUser(null);
+                return;
             }
 
-            const profile = profiles?.[0];
-            let orgId = profile?.organization_id;
+            console.log("[Auth] Setup result:", data.status, data.membership);
 
-            if (!profile) {
-                console.log("[Auth] No profile found, creating for:", email);
-
-                // Default Org ID from diag_db.py
-                const defaultOrgId = "6cb9b31b-1678-4395-95b4-71caa628f94e";
-
-                const isTestUser = email === "adityownseverything@gmail.com" || email === "adityaownseverything@gmail.com";
-
-                if (isTestUser) {
-                    orgId = defaultOrgId;
-                }
-
-                const payload = {
-                    user_id: id,
-                    organization_id: orgId || null,
-                    role: isTestUser ? 'owner' : 'member',
-                    display_name: sbUser.user_metadata?.full_name || email.split('@')[0],
-                    onboarding_completed: true
-                };
-
-                const { data: newProfile, error: insertError } = await supabase
-                    .from('profiles')
-                    .insert(payload)
-                    .select()
-                    .single();
-
-                if (insertError) {
-                    console.error("[Auth] Profile creation failed:", insertError.message, insertError);
-                } else {
-                    console.log("[Auth] Profile created successfully:", newProfile);
-                    orgId = newProfile.organization_id;
-                }
-            } else {
-                console.log("[Auth] Found existing profile:", profile);
-            }
-
-            console.log("[Auth] Setting user state with OrgID:", orgId);
-            processedUserIdRef.current = id;
-
-            const isTestUser = email === "adityownseverything@gmail.com" || email === "adityaownseverything@gmail.com";
-
+            processedUserIdRef.current = sbUser.id;
             setUser({
-                id: id,
-                email: email,
-                name: sbUser.user_metadata?.full_name || email.split('@')[0] || 'User',
-                organizationId: orgId,
-                role: (profile?.role as any) || (isTestUser ? 'owner' : 'viewer')
+                id: sbUser.id,
+                email,
+                name: data.membership.display_name || email.split('@')[0],
+                organizationId: data.membership.org_id,
+                role: data.membership.role as 'owner' | 'dev' | 'viewer',
             });
         } catch (err) {
-            console.error("[Auth] Mapping crash:", err);
+            console.error("[Auth] Setup crash:", err);
+            setUser(null);
         }
     };
 
-    const signIn = async (email: string) => {
+    const signUp = async (email: string, password: string, name: string): Promise<{ error?: string }> => {
         setLoading(true);
-        // Using Magic Link for simple auth (AgentTrace 2.0 design)
-        const { error } = await supabase.auth.signInWithOtp({
+        processedUserIdRef.current = null; // Reset so mapSupabaseUser runs
+
+        const { error } = await supabase.auth.signUp({
             email,
+            password,
             options: {
-                emailRedirectTo: window.location.origin + '/dashboard',
+                data: { full_name: name },
             },
         });
 
         if (error) {
-            console.error("Auth error:", error.message);
-            alert("Error: " + error.message);
+            console.error("[Auth] Signup error:", error.message);
             setLoading(false);
-            return;
+            return { error: error.message };
         }
 
-        alert("Check your email for the magic link!");
-        setLoading(false);
+        // onAuthStateChange will fire → mapSupabaseUser → /api/auth/setup creates org
+        return {};
+    };
+
+    const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
+        setLoading(true);
+        processedUserIdRef.current = null; // Reset so mapSupabaseUser runs
+
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+        });
+
+        if (error) {
+            console.error("[Auth] Login error:", error.message);
+            setLoading(false);
+            return { error: error.message };
+        }
+
+        // onAuthStateChange triggers → mapSupabaseUser
+        return {};
     };
 
     const signOut = async () => {
         setLoading(true);
+        processedUserIdRef.current = null;
         await supabase.auth.signOut();
         setUser(null);
         setLoading(false);
-        router.push('/');
+        router.push('/login');
     };
 
     const hasPermission = (action: string): boolean => {
@@ -191,19 +168,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         switch (action) {
             case 'view_traces':
-                return true; // All roles can view
+                return true;
             case 'create_branch':
-                return user.role === 'dev'; // Owners (handled above) and devs
+                return user.role === 'dev';
             case 'invite_member':
             case 'delete_trace':
-                return false; // Only owners (handled above)
+                return false;
             default:
                 return false;
         }
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signIn, signOut, hasPermission }}>
+        <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, hasPermission }}>
             {children}
         </AuthContext.Provider>
     );
