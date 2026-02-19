@@ -29,9 +29,10 @@ interface TraceEventRowProps {
     onFork?: (event: TraceEvent) => void;
     traceId: string;
     scriptContent?: string;
+    canBranch?: boolean;
 }
 
-export function TraceEventRow({ event, expectedEvent, isSelected, onSelect, onFork, traceId, scriptContent }: TraceEventRowProps) {
+export function TraceEventRow({ event, expectedEvent, isSelected, onSelect, onFork, traceId, scriptContent, canBranch = false }: TraceEventRowProps) {
     const { isLoading } = useBranching();
     const isDivergent = expectedEvent && JSON.stringify(event.payload) !== JSON.stringify(expectedEvent.payload);
     const isNewType = expectedEvent && event.type !== expectedEvent.type;
@@ -79,20 +80,22 @@ export function TraceEventRow({ event, expectedEvent, isSelected, onSelect, onFo
                 </div>
             </div>
 
-            {/* Hover Action: Fork */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 h-6 w-6"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onFork?.(event);
-                }}
-                disabled={isLoading}
-                title="Fork from here"
-            >
-                <GitFork className="h-3 w-3 text-muted-foreground hover:text-brand" />
-            </Button>
+            {/* Hover Action: Fork — only visible to owners and devs */}
+            {canBranch && (
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 h-6 w-6"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onFork?.(event);
+                    }}
+                    disabled={isLoading}
+                    title="Fork from here"
+                >
+                    <GitFork className="h-3 w-3 text-muted-foreground hover:text-brand" />
+                </Button>
+            )}
         </div>
     );
 }

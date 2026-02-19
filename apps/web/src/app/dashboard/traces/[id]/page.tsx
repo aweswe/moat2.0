@@ -61,8 +61,10 @@ function TraceDetailInner() {
     const traceId = params.id as string;
     const { trace, metadata, loading: traceLoading } = useTrace(traceId);
 
+    const { branches, activeBranchId, refreshBranches, createBranch, isLoading } = useBranching();
     const canBranch = hasPermission('create_branch');
-    const { events, loading: eventsLoading, fetchEvents } = useTraceEvents(traceId);
+    const { events, loading: eventsLoading, fetchEvents } = useTraceEvents(traceId, activeBranchId);
+
     const [parentEvents, setParentEvents] = React.useState<any[]>([]);
     const [selectedEvent, setSelectedEvent] = React.useState<TraceEvent | null>(null);
     const [sliderValue, setSliderValue] = React.useState(0);
@@ -72,7 +74,6 @@ function TraceDetailInner() {
     const [activeDiffBranch, setActiveDiffBranch] = React.useState<any>(null);
     const [showScript, setShowScript] = React.useState(false);
     const [cliCopied, setCliCopied] = React.useState(false);
-    const { branches, activeBranchId, refreshBranches, createBranch, isLoading } = useBranching();
 
     // Forking state
     const [isForkDialogOpen, setIsForkDialogOpen] = React.useState(false);
@@ -370,6 +371,7 @@ function TraceDetailInner() {
                                             }}
                                             traceId={traceId}
                                             scriptContent={metadata?.script_content}
+                                            canBranch={canBranch}
                                         />
                                     ))}
                                 </div>

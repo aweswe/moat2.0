@@ -255,14 +255,34 @@ export function useMembers(orgId: string | null | undefined) {
 
     return { members, loading };
 }
-export function useTraceEvents(traceId: string | null | undefined) {
+export function useTraceEvents(traceId: string | null | undefined, branchId?: string | null) {
     const [events, setEvents] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
 
-    const fetchEvents = React.useCallback(async (id: string) => {
+    const fetchEvents = React.useCallback(async (id: string, bId?: string | null) => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.access_token) return [];
+
+            // If we have a branchId, we use the replay API to get the branched events (with overrides)
+            if (bId) {
+                const res = await fetch(`/api/replay`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ traceId: id, branch: bId })
+                });
+
+                if (!res.ok) {
+                    console.error('[useTraceEvents] Replay API error:', res.status);
+                    return [];
+                }
+
+                const { events: evts } = await res.json();
+                return evts || [];
+            }
 
             const res = await fetch(`/api/trace/events?traceId=${id}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` },
@@ -286,13 +306,13 @@ export function useTraceEvents(traceId: string | null | undefined) {
 
         const load = async () => {
             setLoading(true);
-            const data = await fetchEvents(traceId);
+            const data = await fetchEvents(traceId, branchId);
             setEvents(data);
             setLoading(false);
         };
 
         load();
-    }, [traceId, fetchEvents]);
+    }, [traceId, branchId, fetchEvents]);
 
     return { events, loading, fetchEvents };
 }
