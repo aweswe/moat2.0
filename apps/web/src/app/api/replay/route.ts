@@ -8,7 +8,7 @@ const execAsync = promisify(exec);
 
 export async function POST(req: Request) {
     try {
-        const { traceId } = await req.json();
+        const { traceId, step, branch } = await req.json();
 
         if (!traceId) {
             return NextResponse.json({ error: "Trace ID is required" }, { status: 400 });
@@ -35,10 +35,15 @@ export async function POST(req: Request) {
             projectRoot = cwd;
         }
 
-        console.log("DEBUG: Resolved project root:", projectRoot);
-        // Standard way to run the CLI after flushing the stale package environment.
-        // We force UTF-8 (chcp 65001) to support emojis/unicode on Windows.
-        const command = `cmd /c "chcp 65001 > nul && set PYTHONIOENCODING=utf-8 && set PYTHONPATH=${projectRoot} && python -m agenttrace.cli replay ${traceId} --run"`;
+        let cmd = `replay ${traceId} --run`;
+        if (step !== undefined) {
+            cmd += ` --step ${step}`;
+        }
+        if (branch) {
+            cmd += ` --branch "${branch}"`;
+        }
+
+        const command = `cmd /c "chcp 65001 > nul && set PYTHONIOENCODING=utf-8 && set PYTHONPATH=${projectRoot} && python -m agenttrace.cli ${cmd}"`;
         console.log(`[API] Executing replay command: ${command}`);
 
         // We execute from the project root (process.cwd())
@@ -68,11 +73,15 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error("[API] Replay error:", error);
+
+        // Detect "Branch already exists" and return 409
+        const isConflict = error.stdout?.includes("already exists") || error.stderr?.includes("already exists");
+
         return NextResponse.json({
-            error: "Failed to execute replay",
+            error: isConflict ? "Branch already exists" : "Failed to execute replay",
             details: error.message,
             stdout: error.stdout,
             stderr: error.stderr
-        }, { status: 500 });
+        }, { status: isConflict ? 409 : 500 });
     }
 }

@@ -1,9 +1,18 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useTrace, useJobs } from "@/hooks/use-database";
+import { useTrace, useJobs, useTraceEvents } from "@/hooks/use-database";
 import { supabase } from "@/lib/supabase";
 import * as React from "react";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
 import {
     Card,
     CardContent,
@@ -24,6 +33,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BranchPicker } from "@/components/trace/BranchPicker";
+import { TraceEventRow } from "@/components/trace/TraceEventRow";
 
 interface TraceEvent {
     timestamp: string;
@@ -35,39 +46,17 @@ interface TraceEvent {
 export default function TraceDetailPage() {
     const params = useParams();
     const traceId = params.id as string;
-    const { trace, loading: traceLoading } = useTrace(traceId);
-    const [events, setEvents] = React.useState<TraceEvent[]>([]);
-    const [eventsLoading, setEventsLoading] = React.useState(true);
+    const { trace, metadata, loading: traceLoading } = useTrace(traceId);
+    const { events, loading: eventsLoading } = useTraceEvents(traceId);
     const [selectedEvent, setSelectedEvent] = React.useState<TraceEvent | null>(null);
     const [sliderValue, setSliderValue] = React.useState(0);
     const [isReplaying, setIsReplaying] = React.useState(false);
 
     React.useEffect(() => {
-        if (!traceId) return;
-
-        const downloadEvents = async () => {
-            setEventsLoading(true);
-            try {
-                const { data, error } = await supabase.storage
-                    .from('traces')
-                    .download(`${traceId}/events.jsonl`);
-
-                if (error) throw error;
-
-                const text = await data.text();
-                const lines = text.trim().split('\n').filter(l => l.trim());
-                const parsed = lines.map(l => JSON.parse(l));
-                setEvents(parsed);
-                if (parsed.length > 0) setSelectedEvent(parsed[0]);
-            } catch (err) {
-                console.error("Error downloading events:", err);
-            } finally {
-                setEventsLoading(false);
-            }
-        };
-
-        downloadEvents();
-    }, [traceId]);
+        if (events.length > 0 && !selectedEvent) {
+            setSelectedEvent(events[0]);
+        }
+    }, [events, selectedEvent]);
 
     if (traceLoading) {
         return (
@@ -107,29 +96,54 @@ export default function TraceDetailPage() {
                             )}>
                                 {trace.status}
                             </div>
+                            <BranchPicker traceId={traceId} />
                         </div>
                         <p className="text-muted-foreground text-xs font-mono opacity-60 mt-1">UUID: {traceId} // {new Date(trace.created_at).toLocaleString()}</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="font-mono text-[10px] border-brand/20 text-brand hover:bg-brand/5"
-                        onClick={() => {
-                            const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `trace-${traceId}.json`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                        }}
-                    >
-                        <Terminal className="w-3 h-3 mr-2" /> RAW_JSON
-                    </Button>
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="font-mono text-[10px] border-brand/20 text-brand hover:bg-brand/5"
+                            >
+                                <Terminal className="w-3 h-3 mr-2" /> RAW_JSON
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[1000px] h-[80vh] flex flex-col">
+                            <DialogHeader>
+                                <DialogTitle>Raw Trace Events</DialogTitle>
+                                <DialogDescription>
+                                    Technical data stream for trace {traceId}.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="flex-1 bg-black/40 p-4 rounded-lg border border-white/10 overflow-auto font-mono text-[10px]">
+                                <pre className="text-brand">
+                                    {JSON.stringify(events, null, 2)}
+                                </pre>
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = `trace-${traceId}.json`;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        document.body.removeChild(a);
+                                        URL.revokeObjectURL(url);
+                                    }}
+                                >
+                                    Download JSON
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                     <Button
                         size="sm"
                         className="font-mono text-[10px]"
@@ -225,38 +239,15 @@ export default function TraceDetailPage() {
                                 <div className="p-12 text-center opacity-40 italic text-[10px]">NO_EVENTS_CAPTURED</div>
                             ) : (
                                 <div className="divide-y divide-border/50">
-                                    {events.map((event, i) => (
-                                        <div
+                                    {events.map((event: TraceEvent, i: number) => (
+                                        <TraceEventRow
                                             key={i}
-                                            onClick={() => setSelectedEvent(event)}
-                                            className={cn(
-                                                "p-4 cursor-pointer transition-all hover:bg-white/[0.03] group flex items-start gap-4",
-                                                selectedEvent === event && "bg-brand/5 border-l-2 border-l-brand"
-                                            )}
-                                        >
-                                            <div className="mt-1 opacity-40 group-hover:opacity-100 text-[10px] tabular-nums">
-                                                {new Date(event.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}.{new Date(event.timestamp).getMilliseconds().toString().padStart(3, '0')}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className={cn(
-                                                        "px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold uppercase",
-                                                        event.type === 'thought' ? 'bg-purple-500/10 text-purple-400' :
-                                                            event.type === 'tool_call' ? 'bg-orange-500/10 text-orange-400' :
-                                                                event.type === 'tool_result' ? 'bg-green-500/10 text-green-400' :
-                                                                    'bg-gray-500/10 text-gray-400'
-                                                    )}>
-                                                        {event.type}
-                                                    </span>
-                                                    <span className="opacity-80 text-[10px]">
-                                                        {event.type === 'thought' ? event.payload.thought :
-                                                            event.type === 'tool_call' ? event.payload.name :
-                                                                event.type === 'tool_result' ? event.payload.tool_name :
-                                                                    JSON.stringify(event.payload).slice(0, 100)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                            event={event}
+                                            isSelected={selectedEvent === event}
+                                            onSelect={() => setSelectedEvent(event)}
+                                            traceId={traceId}
+                                            scriptContent={metadata?.script_content}
+                                        />
                                     ))}
                                 </div>
                             )}

@@ -13,12 +13,37 @@ def find_trace_root():
     """Find the project root containing .agenttrace"""
     cwd = Path.cwd()
     for path in [cwd] + list(cwd.parents):
-        if (path / ".agenttrace").exists():
+        if (path / ".agenttrace").exists() or (path / ".env").exists():
             return path
     return cwd
 
+def load_env():
+    """Load .env file if it exists in the project root."""
+    root = find_trace_root()
+    env_path = root / ".env"
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ[key] = val
+        print(f"[OK] Loaded environment from {env_path}")
+    else:
+        # Fallback to local .env if not found recursively
+        local_env = Path(".env")
+        if local_env.exists():
+            with open(local_env, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, val = line.split("=", 1)
+                        os.environ[key] = val
+            print(f"[OK] Loaded environment from local {local_env}")
+
 def cmd_record(args):
     """Record a trace"""
+    load_env()
     os.environ["AGENTTRACE_MODE"] = "RECORD"
     
     # Import and run the script
@@ -52,25 +77,32 @@ def cmd_record(args):
     
     # Execute the script (Sandboxed)
     from agenttrace.vfs.patch import patch_io
-    print("🔒 VFS Sandbox: ACTIVE (File I/O will be virtualized)")
+    print("[LOCKED] VFS Sandbox: ACTIVE (File I/O will be virtualized)")
     with patch_io():
-        with open(script_path, 'r') as f:
-            code = compile(f.read(), script_path, 'exec')
+        # Use the content we already read BEFORE instrumentation
+        if script_content:
+            code = compile(script_content, script_path, 'exec')
             exec(code, {'__name__': '__main__', '__file__': script_path})
+        else:
+            # Fallback (rare)
+            with open(script_path, 'r', encoding='utf-8') as f:
+                code = compile(f.read(), script_path, 'exec')
+                exec(code, {'__name__': '__main__', '__file__': script_path})
     
     # Get trace ID
     from agenttrace.core.tracer import Tracer
     tracer = Tracer.get_instance()
     if tracer.trace_id:
-        print(f"\n✅ Trace recorded: {tracer.trace_id}")
-        print(f"📁 Trace file: .agenttrace/traces/{tracer.trace_id}.json")
+        print(f"\n[OK] Trace recorded: {tracer.trace_id}")
+        print(f" Trace file: .agenttrace/traces/{tracer.trace_id}.json")
         return 0
     else:
-        print("❌ No trace was recorded")
+        print("[ERROR] No trace was recorded")
         return 1
 
 def cmd_replay(args):
     """Replay a trace"""
+    load_env()
     trace_id = args.trace_id
     step = args.step
     branch = args.branch
@@ -86,14 +118,39 @@ def cmd_replay(args):
     root = find_trace_root()
     trace_dir = root / ".agenttrace" / "traces" / trace_id
     if not trace_dir.exists():
-        print(f"Error: Trace not found: {trace_id}")
-        return 1
+        print(f"[REPLAY] Trace {trace_id} not found locally. Checking cloud...")
+        
+        # Try to download from Cloud
+        project_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+        anon_key = os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+        
+        # In CLI context, we might need service role key if RLS is strict, but usually anon read is fine for traces?
+        # Actually, traces table might be private. But storage 'traces' bucket usually public or authenticated.
+        # Let's try anon key first.
+        
+        if project_url and anon_key:
+            try:
+                from agenttrace.cloud.synchronizer import CloudSynchronizer
+                # Use service role if available for higher privs
+                key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or anon_key
+                sync = CloudSynchronizer(project_url, key)
+                if sync.download_trace(trace_id, str(trace_dir)):
+                    print(f"[REPLAY] Trace downloaded from cloud.")
+                else:
+                    print(f"Error: Trace not found locally or in cloud: {trace_id}")
+                    return 1
+            except Exception as e:
+                print(f"[ERROR] Cloud download failed: {e}")
+                return 1
+        else:
+            print(f"Error: Trace not found: {trace_id} (and Cloud env vars missing)")
+            return 1
     
-    print(f"🔄 Replaying trace: {trace_id}")
+    print(f"[REPLAY] Replaying trace: {trace_id}")
     if step is not None:
-        print(f"📍 Jumping to step: {step}")
+        print(f"[JUMP] Jumping to step: {step}")
     if branch:
-        print(f"🌿 Using branch: {branch}")
+        print(f"[BRANCH] Using branch: {branch}")
     
     # Import agenttrace
     import agenttrace.instrumentation.bootstrap
@@ -104,14 +161,14 @@ def cmd_replay(args):
         script_path = None
         if metadata_file.exists():
             try:
-                with open(metadata_file, 'r') as f:
+                with open(metadata_file, 'r', encoding='utf-8') as f:
                     meta = json.load(f)
                     script_path = meta.get("script_path")
             except:
                 pass
         
         if script_path and os.path.exists(script_path):
-            print(f"🚀 Executing replay script: {script_path}")
+            print(f"[START] Executing replay script: {script_path}")
             import subprocess
             
             # Prepare env for subprocess
@@ -123,23 +180,24 @@ def cmd_replay(args):
                 env["AGENTTRACE_STEP"] = str(step)
             if branch:
                 env["AGENTTRACE_BRANCH"] = branch
+                env["AGENTTRACE_RECORD_REPLAY"] = "1"
                 
             try:
                 subprocess.run([sys.executable, script_path], env=env, check=True)
-                print("\n✅ Replay execution complete.")
+                print("\n[OK] Replay execution complete.")
             except subprocess.CalledProcessError as e:
-                print(f"\n❌ Replay execution failed: {e}")
+                print(f"\n[ERROR] Replay execution failed: {e}")
                 return 1
             return 0
         else:
-            print(f"❌ Could not find original script path in metadata or file missing.")
+            print(f"[ERROR] Could not find original script path in metadata or file missing.")
             if script_path:
                 print(f"   Expected: {script_path}")
             return 1
 
     # For now, we can't automatically rerun the script
     # User needs to run it manually or we store the script path
-    print("⚠️  Note: Replay mode is active. Run your original script to see replay in action.")
+    print("[WARN]  Note: Replay mode is active. Run your original script to see replay in action.")
     return 0
 
 def cmd_list(args):
@@ -161,7 +219,7 @@ def cmd_list(args):
         
         try:
             if metadata_file.exists():
-                with open(metadata_file, 'r') as f:
+                with open(metadata_file, 'r', encoding='utf-8') as f:
                     meta = json.load(f)
                     traces.append({
                         "id": trace_id,
@@ -173,7 +231,7 @@ def cmd_list(args):
                 # Fallback: Count lines in events.jsonl (slow but works)
                 events_file = trace_item / "events.jsonl"
                 if events_file.exists():
-                     with open(events_file, 'r') as f:
+                     with open(events_file, 'r', encoding='utf-8') as f:
                         count = sum(1 for _ in f)
                         traces.append({
                             "id": trace_id,
@@ -189,7 +247,7 @@ def cmd_list(args):
         print("No traces found")
         return 0
     
-    print(f"\n📊 Found {len(traces)} trace(s):\n")
+    print(f"\n Found {len(traces)} trace(s):\n")
     print(f"{'Trace ID':<40} {'Events':<10} {'Duration':<15}")
     print("-" * 65)
     
@@ -216,32 +274,32 @@ def cmd_ui(args):
         frontend_dir = agenttrace_dir.parent / "frontend"
     
     if not frontend_dir.exists():
-        print("❌ Frontend directory not found!")
-        print("📝 To set up the frontend:")
+        print("[ERROR] Frontend directory not found!")
+        print(" To set up the frontend:")
         print("   1. cd frontend")
         print("   2. npm install")
         print("   3. npm run dev")
         return 1
     
-    print("🌐 Starting AgentTrace Next.js Frontend...")
-    print("📝 Open http://localhost:3000 in your browser")
-    print("⚠️  Press Ctrl+C to stop\n")
+    print(" Starting AgentTrace Next.js Frontend...")
+    print(" Open http://localhost:3000 in your browser")
+    print("[WARN]  Press Ctrl+C to stop\n")
     
     try:
         os.chdir(frontend_dir)
         subprocess.run(["npm", "run", "dev"], check=True)
     except KeyboardInterrupt:
-        print("\n👋 Server stopped")
+        print("\n Server stopped")
         return 0
     except FileNotFoundError:
-        print("❌ npm not found. Please install Node.js:")
+        print("[ERROR] npm not found. Please install Node.js:")
         print("   https://nodejs.org/")
         print("\nOr run manually:")
         print(f"   cd {frontend_dir}")
         print("   npm run dev")
         return 1
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         print("\nRun manually:")
         print(f"   cd {frontend_dir}")
         print("   npm run dev")
@@ -259,15 +317,15 @@ def cmd_fix(args):
     model = args.model
     
     if use_ai:
-        print("🤖 Using AI-powered auto-fix (Groq)...")
+        print(" Using AI-powered auto-fix (Groq)...")
         if not api_key:
-            print("💡 Tip: Set GROQ_API_KEY in .env file or use --api-key flag")
+            print("[FIX] Tip: Set GROQ_API_KEY in .env file or use --api-key flag")
         if model:
-            print(f"🧠 Using Groq model: {model}")
+            print(f" Using Groq model: {model}")
         else:
-            print("🧠 Using default Groq model (override via GROQ_MODEL or --model)")
+            print(" Using default Groq model (override via GROQ_MODEL or --model)")
     else:
-        print("🔧 Using heuristic-based suggestions...")
+        print(" Using heuristic-based suggestions...")
     
     result = auto_fix_local(
         args.trace_id,
@@ -278,17 +336,17 @@ def cmd_fix(args):
     )
     
     if "error" in result:
-        print(f"❌ {result['error']}")
+        print(f"[ERROR] {result['error']}")
         if "GROQ_API_KEY" in result.get('error', ''):
-            print("\n📝 To set up your API key/model:")
+            print("\n To set up your API key/model:")
             print("   1. Create a .env file in the project root")
             print("   2. Add: GROQ_API_KEY=your_key_here")
             print("   3. (Optional) Add: GROQ_MODEL=preferred_model")
             print("   4. Or use: agenttrace fix <trace-id> --api-key your_key [--model llama3-8b-8192]")
         return 1
     
-    print(f"\n🔧 Auto-Fix Analysis for {args.trace_id}")
-    print(f"📊 {result.get('summary', '')}\n")
+    print(f"\n Auto-Fix Analysis for {args.trace_id}")
+    print(f" {result.get('summary', '')}\n")
     
     for fix in result.get("fixes", []):
         error_type = fix['error_event'].get('type', 'unknown')
@@ -296,7 +354,7 @@ def cmd_fix(args):
         error_name = payload.get('error_type', error_type)
         error_msg = payload.get('message', '')
         
-        print(f"📍 Step {fix['step']}: {error_name}")
+        print(f"[JUMP] Step {fix['step']}: {error_name}")
         if error_msg:
             print(f"   Message: {error_msg}")
         print()
@@ -304,29 +362,29 @@ def cmd_fix(args):
         # Display AI-generated fix
         if fix.get('ai_fix') and not fix.get('ai_failed'):
             ai_fix = fix['ai_fix']
-            print("🤖 AI-Generated Fix:")
+            print(" AI-Generated Fix:")
             print("-" * 60)
             
             if isinstance(ai_fix, dict):
                 if 'analysis' in ai_fix:
-                    print(f"📋 Analysis: {ai_fix['analysis']}")
+                    print(f" Analysis: {ai_fix['analysis']}")
                 if 'root_cause' in ai_fix:
-                    print(f"🔍 Root Cause: {ai_fix['root_cause']}")
+                    print(f"[SEARCH] Root Cause: {ai_fix['root_cause']}")
                 
                 fix_info = ai_fix.get('fix', {})
                 if fix_info:
-                    print(f"\n📝 Fix for {fix_info.get('file', 'unknown')} (line {fix_info.get('line', '?')}):")
+                    print(f"\n Fix for {fix_info.get('file', 'unknown')} (line {fix_info.get('line', '?')}):")
                     if fix_info.get('original_code'):
-                        print(f"\n❌ Original Code:\n{fix_info['original_code']}")
+                        print(f"\n[ERROR] Original Code:\n{fix_info['original_code']}")
                     if fix_info.get('fixed_code'):
-                        print(f"\n✅ Fixed Code:\n{fix_info['fixed_code']}")
+                        print(f"\n[OK] Fixed Code:\n{fix_info['fixed_code']}")
                     if fix_info.get('explanation'):
-                        print(f"\n💡 Explanation: {fix_info['explanation']}")
+                        print(f"\n[FIX] Explanation: {fix_info['explanation']}")
                 
                 if 'suggestions' in ai_fix and ai_fix['suggestions']:
-                    print("\n💡 Additional Suggestions:")
+                    print("\n[FIX] Additional Suggestions:")
                     for suggestion in ai_fix['suggestions']:
-                        print(f"   • {suggestion}")
+                        print(f"    {suggestion}")
             else:
                 # Raw response fallback
                 print(ai_fix)
@@ -335,12 +393,12 @@ def cmd_fix(args):
         
         # Display fallback suggestions
         elif fix.get('suggestions'):
-            print("💡 Suggestions:")
+            print("[FIX] Suggestions:")
             for suggestion in fix.get("suggestions", []):
-                print(f"  ⚠️  {suggestion['issue']}")
-                print(f"  💡 {suggestion['suggestion']}")
+                print(f"  [WARN]  {suggestion['issue']}")
+                print(f"  [FIX] {suggestion['suggestion']}")
                 if suggestion.get("code"):
-                    print(f"  📝 Code:\n{suggestion['code']}")
+                    print(f"   Code:\n{suggestion['code']}")
         
         print()
     
@@ -358,23 +416,23 @@ def cmd_branch(args):
         try:
             data = branch_storage.create_branch(args.trace_id, args.step, args.name)
         except Exception as e:
-            print(f"❌ Failed to create branch: {e}")
+            print(f"[ERROR] Failed to create branch: {e}")
             return 1
-        print(f"✅ Branch created: {data['branch_id']} (fork step {data['fork_step']})")
+        print(f"[OK] Branch created: {data['branch_id']} (fork step {data['fork_step']})")
         return 0
 
     if sub == "edit":
         try:
             payload = json.loads(args.payload)
         except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON payload: {e}")
+            print(f"[ERROR] Invalid JSON payload: {e}")
             return 1
         try:
             branch_storage.update_override(args.branch_id, args.event, payload)
         except Exception as e:
-            print(f"❌ Failed to update branch: {e}")
+            print(f"[ERROR] Failed to update branch: {e}")
             return 1
-        print(f"✅ Updated branch {args.branch_id} at event {args.event}")
+        print(f"[OK] Updated branch {args.branch_id} at event {args.event}")
         return 0
 
     if sub == "list":
@@ -382,7 +440,7 @@ def cmd_branch(args):
         if not items:
             print("No branches found")
             return 0
-        print(f"\n🌿 Branches ({len(items)}):\n")
+        print(f"\n[BRANCH] Branches ({len(items)}):\n")
         for item in items:
             print(f"- {item['branch_id']} (trace {item['parent_trace_id']}, step {item['fork_step']})")
         return 0
@@ -479,16 +537,16 @@ def cmd_login(args):
     token = args.token
     if not token:
         import getpass
-        print("🔑 Enter your Supabase Access Token:")
+        print(" Enter your Supabase Access Token:")
         print("   (Get one from your project dashboard or ask your admin)")
         token = getpass.getpass("Token: ")
     
     if not token:
-        print("❌ Token required")
+        print("[ERROR] Token required")
         return 1
         
     auth.login(token)
-    print("✅ Successfully logged in!")
+    print("[OK] Successfully logged in!")
     return 0
 
 def cmd_push(args):
@@ -498,10 +556,10 @@ def cmd_push(args):
     result = cloud.upload_trace(args.trace_id, project_id=args.project)
     
     if "error" in result:
-        print(f"❌ {result['error']}")
+        print(f"[ERROR] {result['error']}")
         return 1
     
-    print(f"\n✨ Trace {args.trace_id} pushed successfully!")
+    print(f"\n Trace {args.trace_id} pushed successfully!")
     print(f"   View at: http://localhost:3000/trace/{args.trace_id}") # TODO: Use real URL
     return 0
 
@@ -518,7 +576,7 @@ def cmd_verify(args):
     override_json = getattr(args, 'override', None)
     
     if not os.path.exists(script_path):
-        print(f"❌ Script not found: {script_path}")
+        print(f"[ERROR] Script not found: {script_path}")
         return 1
     
     print("=" * 60)
@@ -538,7 +596,7 @@ def cmd_verify(args):
         try:
             override = json.loads(override_json)
         except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON override: {e}")
+            print(f"[ERROR] Invalid JSON override: {e}")
             return 1
     
     # Create temp directory for traces
@@ -570,17 +628,17 @@ def cmd_verify(args):
             sys.path.insert(0, script_dir)
             
             try:
-                with open(script_path, 'r') as f:
+                with open(script_path, 'r', encoding='utf-8') as f:
                     code = compile(f.read(), script_path, 'exec')
                     exec(code, {'__name__': '__main__', '__file__': script_path})
             except Exception as e:
-                print(f"  ❌ Execution error: {e}")
+                print(f"  [ERROR] Execution error: {e}")
                 return 1
             
             # Compute hash of events (excluding timestamps)
             events_path = os.path.join(temp_dir, trace_id, "events.jsonl")
             if os.path.exists(events_path):
-                with open(events_path, 'r') as f:
+                with open(events_path, 'r', encoding='utf-8') as f:
                     events = []
                     for line in f:
                         if line.strip():
@@ -596,7 +654,7 @@ def cmd_verify(args):
                     hashes.append(hash_val)
                     print(f"  Hash: {hash_val[:16]}...")
             else:
-                print(f"  ❌ No events recorded")
+                print(f"  [ERROR] No events recorded")
                 return 1
         
         print()

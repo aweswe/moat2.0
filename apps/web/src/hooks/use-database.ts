@@ -126,26 +126,48 @@ export function useStats() {
 
 export function useTrace(traceId: string) {
     const [trace, setTrace] = React.useState<Trace | null>(null);
+    const [metadata, setMetadata] = React.useState<any>(null);
     const [loading, setLoading] = React.useState(true);
 
     React.useEffect(() => {
         if (!traceId) return;
 
         const fetchTrace = async () => {
-            const { data, error } = await supabase
+            // 1. Fetch Trace Record
+            const { data: traceData, error: traceError } = await supabase
                 .from('traces')
                 .select('*')
                 .eq('id', traceId)
                 .single();
 
-            if (!error) setTrace(data);
+            if (traceError) {
+                console.error("Error fetching trace:", traceError);
+                setLoading(false);
+                return;
+            }
+            setTrace(traceData);
+
+            // 2. Fetch Metadata (Script Content)
+            try {
+                const { data: metaData, error: metaError } = await supabase.storage
+                    .from('traces')
+                    .download(`${traceId}/metadata.json`);
+
+                if (!metaError && metaData) {
+                    const text = await metaData.text();
+                    setMetadata(JSON.parse(text));
+                }
+            } catch (e) {
+                console.warn("Failed to fetch metadata.json", e);
+            }
+
             setLoading(false);
         };
 
         fetchTrace();
     }, [traceId]);
 
-    return { trace, loading };
+    return { trace, metadata, loading };
 }
 
 export function useAFECandidates(jobId: string) {
@@ -230,33 +252,45 @@ export function useTraceEvents(traceId: string | null | undefined) {
 
     const fetchEvents = React.useCallback(async () => {
         if (!traceId) return;
-        const { data, error } = await supabase
-            .from('trace_events')
-            .select('*')
-            .eq('trace_id', traceId)
-            .order('timestamp', { ascending: true });
+        setLoading(true);
 
-        if (!error) setEvents(data || []);
-        setLoading(false);
+        try {
+            // Download events.jsonl from Supabase Storage
+            const { data, error } = await supabase.storage
+                .from('traces')
+                .download(`${traceId}/events.jsonl`);
+
+            if (error) {
+                console.warn("Failed to fetch events.jsonl:", error);
+                setEvents([]);
+            } else if (data) {
+                const text = await data.text();
+                // Parse NDJSON
+                const parsedEvents = text
+                    .split('\n')
+                    .filter(line => line.trim())
+                    .map(line => {
+                        try {
+                            return JSON.parse(line);
+                        } catch (e) {
+                            return null;
+                        }
+                    })
+                    .filter(Boolean);
+
+                setEvents(parsedEvents);
+            }
+        } catch (e) {
+            console.error("Error loading trace events:", e);
+            setEvents([]);
+        } finally {
+            setLoading(false);
+        }
     }, [traceId]);
 
     React.useEffect(() => {
         fetchEvents();
-
-        if (!traceId) return;
-
-        const sub = supabase.channel(`trace-events-${traceId}`)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'trace_events',
-                filter: `trace_id=eq.${traceId}`
-            }, (payload) => {
-                setEvents(prev => [...prev, payload.new]);
-            })
-            .subscribe();
-
-        return () => { sub.unsubscribe(); };
+        // No real-time subscription for storage files yet (Storage events are basic)
     }, [traceId, fetchEvents]);
 
     return { events, loading };

@@ -21,7 +21,7 @@ class SandboxValidator:
         Runs the candidate fix in a sandbox.
         Returns validation results (success, logs, metrics).
         """
-        print(f"🧪 Validator: Starting validation for candidate {candidate.type}...")
+        print(f" Validator: Starting validation for candidate {candidate.type}...")
         
         # 1. Create Temp Directory
         with tempfile.TemporaryDirectory(prefix="afe_sandbox_") as tmp_dir:

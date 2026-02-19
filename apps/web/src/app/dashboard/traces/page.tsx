@@ -23,10 +23,17 @@ import { cn } from "@/lib/utils";
 
 interface Trace {
     id: string;
-    title: string;
-    status: string;
     created_at: string;
+    status: string;
     org_id: string;
+    // Expanded metadata from JSONB
+    metadata?: {
+        title?: string;
+        duration_s?: number;
+        event_count?: number;
+        tags?: string[];
+        host_info?: any;
+    };
 }
 
 export default function TracesPage() {
@@ -57,7 +64,7 @@ export default function TracesPage() {
 
     const filteredTraces = traces.filter(t =>
         t.id.toLowerCase().includes(search.toLowerCase()) ||
-        (t.title || "").toLowerCase().includes(search.toLowerCase())
+        (t.metadata?.title || "").toLowerCase().includes(search.toLowerCase())
     );
 
     return (
@@ -111,11 +118,21 @@ export default function TracesPage() {
                                 >
                                     <div className="flex items-center gap-6">
                                         <div className="flex flex-col gap-1">
-                                            <div className="text-foreground font-bold text-sm tracking-tight group-hover:text-brand transition-colors">
-                                                {trace.title || "Untitled_Trace"}
+                                            <div className="text-foreground font-bold text-sm tracking-tight group-hover:text-brand transition-colors flex items-center gap-2">
+                                                {trace.metadata?.title || "Untitled_Trace"}
+                                                {trace.metadata?.duration_s && (
+                                                    <span className="px-1.5 py-0.5 rounded bg-white/5 text-[9px] text-muted-foreground font-normal">
+                                                        {trace.metadata.duration_s.toFixed(2)}s
+                                                    </span>
+                                                )}
                                             </div>
-                                            <div className="text-[10px] opacity-40 tabular-nums">
-                                                UUID: {trace.id}
+                                            <div className="text-[10px] opacity-40 tabular-nums font-mono">
+                                                {trace.id}
+                                                {trace.metadata?.host_info?.platform && (
+                                                    <span className="ml-2 text-white/20">
+                                                        // {trace.metadata.host_info.platform}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

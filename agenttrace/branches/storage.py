@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 BRANCH_DIR = Path(".agenttrace/branches")
-SNAPSHOT_DIR = Path(".agenttrace/snapshots")
+SNAPSHOT_DIR = Path(".agenttrace/checkpoints")
 
 
 def _ensure_branch_dir():
@@ -56,13 +56,24 @@ def load_branch(branch_id: str):
 
 def create_branch(trace_id: str, fork_step: int, name: str | None = None):
     """
-    Create a new branch metadata entry. Requires snapshot at fork_step.
+    Create a new branch metadata entry. Requires at least one keyframe at or before fork_step.
     """
-    snapshot_path = SNAPSHOT_DIR / f"{trace_id}_{fork_step}.pkl"
-    if not snapshot_path.exists():
-        raise FileNotFoundError(
-            f"No snapshot found for trace {trace_id} at step {fork_step}. "
-            "Replay the trace with keyframes enabled before creating a branch."
+    # Check keyframes.json in the trace directory
+    trace_root = Path(".agenttrace/traces") / trace_id
+    keyframes_path = trace_root / "keyframes.json"
+    
+    if not keyframes_path.exists():
+        raise FileNotFoundError(f"No keyframes found for trace {trace_id}. Cannot create branch.")
+    
+    with keyframes_path.open() as f:
+        keyframes = json.load(f)
+    
+    # Find if any keyframe exists <= fork_step
+    steps = sorted([int(s) for s in keyframes.keys()])
+    if not steps or steps[0] > fork_step:
+        raise ValueError(
+            f"No keyframe available at or before step {fork_step}. "
+            f"Nearest keyframe is at step {steps[0] if steps else 'N/A'}."
         )
 
     _ensure_branch_dir()

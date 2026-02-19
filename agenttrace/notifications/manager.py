@@ -19,7 +19,7 @@ class NotificationManager:
                 self.slack_webhook_url = response.data.get("slack_webhook_url")
                 self.email_config = response.data.get("email_config")
         except Exception as e:
-            print(f"⚠ Failed to load notification config: {e}")
+            print(f"[WARN] Failed to load notification config: {e}")
 
     def send_slack_alert(self, message: str, blocks: Optional[list] = None):
         """Send alert to Slack."""
@@ -33,7 +33,7 @@ class NotificationManager:
         try:
             requests.post(self.slack_webhook_url, json=payload, timeout=5)
         except Exception as e:
-            print(f"⚠ Failed to send Slack alert: {e}")
+            print(f"[WARN] Failed to send Slack alert: {e}")
 
     def send_email_alert(self, subject: str, html_content: str):
         """Send email using Brevo."""
@@ -64,20 +64,20 @@ class NotificationManager:
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=10)
             if response.status_code not in [200, 201, 202]:
-                print(f"⚠ Brevo API error: {response.status_code} - {response.text}")
+                print(f"[WARN] Brevo API error: {response.status_code} - {response.text}")
         except Exception as e:
-            print(f"⚠ Failed to send Brevo email: {e}")
+            print(f"[WARN] Failed to send Brevo email: {e}")
 
     def notify_failure(self, job_id: str, trace_id: str, error: str):
         """High-level method to notify about a job failure."""
         # Slack
-        msg = f"🚨 *Job Failed*\n*Job ID:* `{job_id}`\n*Trace ID:* `{trace_id}`\n*Error:* {error}"
+        msg = f" *Job Failed*\n*Job ID:* `{job_id}`\n*Trace ID:* `{trace_id}`\n*Error:* {error}"
         self.send_slack_alert(msg)
 
         # Email
         subject = f"[AgentTrace] Job Failed: {job_id}"
         html = f"""
-        <h2>🚨 Job Failed</h2>
+        <h2> Job Failed</h2>
         <p><b>Job ID:</b> {job_id}</p>
         <p><b>Trace ID:</b> {trace_id}</p>
         <p><b>Error:</b> {error}</p>
@@ -88,13 +88,13 @@ class NotificationManager:
     def notify_fix_found(self, job_id: str, candidate_id: str, confidence: float):
         """High-level method to notify about a found fix."""
         # Slack
-        msg = f"✅ *Fix Found*\n*Job ID:* `{job_id}`\n*Candidate:* `{candidate_id}`\n*Confidence:* {confidence}"
+        msg = f"[OK] *Fix Found*\n*Job ID:* `{job_id}`\n*Candidate:* `{candidate_id}`\n*Confidence:* {confidence}"
         self.send_slack_alert(msg)
 
         # Email
         subject = f"[AgentTrace] Fix Found for Job {job_id}"
         html = f"""
-        <h2>✅ Fix Found</h2>
+        <h2>[OK] Fix Found</h2>
         <p><b>Job ID:</b> {job_id}</p>
         <p><b>Candidate ID:</b> {candidate_id}</p>
         <p><b>Confidence:</b> {confidence}</p>

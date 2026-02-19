@@ -264,6 +264,40 @@ def apply_event_to_state(state: Dict[str, Any], event: Dict[str, Any]) -> Dict[s
             "path": payload.get("path"),
             "timestamp": event.get("timestamp")
         })
+
+    elif t == "file_rename" or t == "dir_rename":
+        state.setdefault("_vfs", {})
+        old_path = payload.get("old")
+        new_path = payload.get("new")
+        if old_path and new_path:
+            # Reconstruct in VFS bridge
+            from agenttrace.core.vfs_bridge import vfs_rename
+            try:
+                vfs_rename(old_path, new_path)
+                # Update state tracking if exists
+                if old_path in state["_vfs"]:
+                    state["_vfs"][new_path] = state["_vfs"].pop(old_path)
+            except: pass
+
+    elif t == "file_remove":
+        state.setdefault("_vfs", {})
+        path = payload.get("path")
+        if path:
+            from agenttrace.core.vfs_bridge import vfs_remove
+            try:
+                vfs_remove(path)
+                if path in state["_vfs"]:
+                    del state["_vfs"][path]
+            except: pass
+
+    elif t == "makedirs":
+        # Usually just creates dirs, no content to track in state['_vfs']
+        # But we could ensure bridge is aware if needed
+        pass
+
+    elif t == "rmdir":
+        # Similar to remove but for dirs
+        pass
     
     # ============================================
     # SECTION 7: STATE UPDATES (GENERIC)
@@ -333,7 +367,8 @@ def apply_event_to_state(state: Dict[str, Any], event: Dict[str, Any]) -> Dict[s
             "type": t,
             "payload": payload
         })
-        print(f"⚠ Unknown event type: {t} (seq {seq})")
+        # print(f"⚠ Unknown event type: {t} (seq {seq})")
+        pass
     
     return state
 

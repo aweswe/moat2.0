@@ -5,15 +5,7 @@ from pathlib import Path
 # Add the current directory to sys.path so we can import agenttrace
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Manually load .env
-env_path = Path(__file__).parent / ".env"
-if env_path.exists():
-    with open(env_path, "r") as f:
-        for line in f:
-            if "=" in line and not line.startswith("#"):
-                key, val = line.strip().split("=", 1)
-                os.environ[key] = val
-    print(f"✅ Loaded .env from {env_path}")
+# sys.path is already handled by cli.py record
 
 from agenttrace.core.tracer import Tracer
 

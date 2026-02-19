@@ -4,6 +4,10 @@ import sys
 import json
 import uuid
 import time as time_module
+try:
+    from agenttrace.cloud.synchronizer import CloudSynchronizer
+except ImportError:
+    CloudSynchronizer = None
 import threading
 import queue
 import hashlib
@@ -22,6 +26,10 @@ try:
     _HAS_NUMPY = True
 except Exception:
     _HAS_NUMPY = False
+
+class ReplayError(Exception):
+    """Raised when replay diverges from recorded history."""
+    pass
 
 _original_time = time_module.time
 
@@ -61,6 +69,9 @@ class Tracer:
         self.trace_id: Optional[str] = None
         self.storage_root = storage_root
         self.keyframe_interval = keyframe_interval
+        self.storage_root = storage_root
+        self.keyframe_interval = keyframe_interval
+        self.start_time = None
         self.checkpoint_manager = CheckpointManager()
         self._pending_restore_state = None
         self.branch_overrides: Dict[int, Any] = {}
@@ -103,6 +114,14 @@ class Tracer:
         self._closed = False
         self._guard = threading.local()
         
+        # Cloud Sync (Layer 2)
+        self.synchronizer: Optional[CloudSynchronizer] = None
+        if CloudSynchronizer and os.environ.get("NEXT_PUBLIC_SUPABASE_URL"):
+            self.synchronizer = CloudSynchronizer(
+                os.environ["NEXT_PUBLIC_SUPABASE_URL"],
+                os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
+            )
+        
         # Audit context for compliance tracking
         self.audit_context: Dict[str, Any] = {
             "user_id": os.environ.get("AGENTTRACE_USER_ID"),
@@ -142,6 +161,72 @@ class Tracer:
         finally:
             self._guard.disabled = prev
 
+    def _get_replay_handlers(self):
+        return {
+            "makedirs": self._handle_replay_makedirs,
+            "file_write": self._handle_replay_file_write,
+            "file_rename": self._handle_replay_file_rename,
+            "dir_rename": self._handle_replay_dir_rename,
+            "file_remove": self._handle_replay_file_remove,
+            "rmdir": self._handle_replay_rmdir,
+            "file_exists": self._handle_replay_file_exists,
+            "file_isdir": self._handle_replay_file_isdir,
+            # Async Events
+            "async_task_spawn": self._handle_replay_async_event,
+            "async_task_start": self._handle_replay_async_event,
+            "async_task_complete": self._handle_replay_async_event,
+            "async_task_exception": self._handle_replay_async_event,
+        }
+
+    # -----------------------
+    # Replay Handlers (Short-circuiting)
+    # -----------------------
+    def _handle_replay_makedirs(self, recorded_payload: dict, current_payload: dict):
+        # Validation: check if paths match
+        if recorded_payload.get("path") != current_payload.get("path"):
+            raise ReplayError(f"makedirs path mismatch: recorded={recorded_payload.get('path')}, current={current_payload.get('path')}")
+        return True
+
+    def _handle_replay_file_write(self, recorded_payload: dict, current_payload: dict):
+        if recorded_payload.get("path") != current_payload.get("path"):
+            raise ReplayError(f"file_write path mismatch: recorded={recorded_payload.get('path')}, current={current_payload.get('path')}")
+        return True
+
+    def _handle_replay_file_rename(self, recorded_payload: dict, current_payload: dict):
+        if recorded_payload.get("old") != current_payload.get("old") or recorded_payload.get("new") != current_payload.get("new"):
+            raise ReplayError(f"file_rename mismatch: recorded={recorded_payload.get('old')}->{recorded_payload.get('new')}, current={current_payload.get('old')}->{current_payload.get('new')}")
+        return True
+
+    def _handle_replay_dir_rename(self, recorded_payload: dict, current_payload: dict):
+        if recorded_payload.get("old") != current_payload.get("old") or recorded_payload.get("new") != current_payload.get("new"):
+            raise ReplayError(f"dir_rename mismatch: recorded={recorded_payload.get('old')}->{recorded_payload.get('new')}, current={current_payload.get('old')}->{current_payload.get('new')}")
+        return True
+
+    def _handle_replay_file_remove(self, recorded_payload: dict, current_payload: dict):
+        if recorded_payload.get("path") != current_payload.get("path"):
+            raise ReplayError(f"file_remove path mismatch: recorded={recorded_payload.get('path')}, current={current_payload.get('path')}")
+        return True
+
+    def _handle_replay_rmdir(self, recorded_payload: dict, current_payload: dict):
+        if recorded_payload.get("path") != current_payload.get("path"):
+            raise ReplayError(f"rmdir path mismatch: recorded={recorded_payload.get('path')}, current={current_payload.get('path')}")
+        return True
+
+    def _handle_replay_file_exists(self, recorded_payload: dict, current_payload: dict):
+        if recorded_payload.get("path") != current_payload.get("path"):
+            raise ReplayError(f"file_exists path mismatch: recorded={recorded_payload.get('path')}, current={current_payload.get('path')}")
+        return True
+
+    def _handle_replay_file_isdir(self, recorded_payload: dict, current_payload: dict):
+        if recorded_payload.get("path") != current_payload.get("path"):
+            raise ReplayError(f"file_isdir path mismatch: recorded={recorded_payload.get('path')}, current={current_payload.get('path')}")
+        return True
+
+    def _handle_replay_async_event(self, recorded_payload: dict, current_payload: dict):
+        # For now, we just validate existence. 
+        # Future: timestamp correlation or causal ID matching.
+        return True
+
     # @classmethod get_instance is now defined above for clarity
 
 
@@ -167,12 +252,6 @@ class Tracer:
         skip_instrumentation: bool = False
     ):
         """Start recording a new trace."""
-        # NEW: Auto-detect script path if not provided
-        if not script_path:
-            script_path = self._detect_caller_script()
-            if script_path:
-                print(f"[AgentTrace] Auto-detected script: {os.path.basename(script_path)}")
-        
         # NEW: Immediately read script content
         if script_path and os.path.exists(script_path):
             try:
@@ -182,6 +261,8 @@ class Tracer:
             except Exception as e:
                 print(f"[AgentTrace] Warning: Failed to read script: {e}")
         
+        self.start_time = time_module.time()
+        
         if not trace_id:
             # Re-use existing trace_id if already active, otherwise generate new one
             trace_id = self.trace_id or str(uuid.uuid4())
@@ -190,20 +271,6 @@ class Tracer:
         self.script_path = script_path
         self.script_content = script_content
         
-        # 4. Register trace in DB (Async/Sync depending on context)
-        if self.api_key:
-            self._register_trace_in_supabase(script_path)
-        
-        # 3. CRITICAL: Upload script BEFORE starting trace
-        # This ensures Replay works even if the agent crashes immediately
-        if self.api_key and script_content:
-            success = self._upload_script_sync(script_content)
-            if not success:
-                print("[AgentTrace] ⚠️ Script upload failed, retrying...")
-                success = self._upload_script_sync(script_content)
-                if not success:
-                    print("[AgentTrace] ❌ Script upload failed. Replay may not work.")
-
         with self._event_lock:
             # If we are in REPLAY mode (set by environment), skip start_recording
             if self.mode == Mode.REPLAY:
@@ -243,11 +310,11 @@ class Tracer:
                 
                 # FORCE CREATION NOW to ensure file exists before append
                 try:
-                    with open(self._events_file_path, "w") as f:
+                    with open(self._events_file_path, "w", encoding="utf-8") as f:
                         pass
-                    print(f"[AgentTrace] Created new events file: {self._events_file_path}")
+                    print(f"[AgentTrace] [OK] Created new events file: {self._events_file_path}")
                 except Exception as e:
-                    print(f"[AgentTrace] ❌ Failed to create events file {self._events_file_path}: {e}")
+                    print(f"[AgentTrace] [ERROR] Failed to create events file {self._events_file_path}: {e}")
                     print(f"[AgentTrace] Cleared old events file for fresh recording")
                 self._event_seq = 0
             
@@ -265,7 +332,7 @@ class Tracer:
             # This ensures they cannot be accidentally clobbered
             if fork_step is not None:
                 self.fork_step = int(fork_step)
-                print(f"[AgentTrace] 🔮 Fork mode enabled: injection at step {self.fork_step}")
+                print(f"[AgentTrace] [FORK] Fork mode enabled: injection at step {self.fork_step}")
             else:
                 self.fork_step = None
             
@@ -274,7 +341,7 @@ class Tracer:
                 import copy
                 self.event_override = copy.deepcopy(event_override)
                 override_tool = event_override.get("payload", {}).get("tool") or event_override.get("tool", "unknown")
-                print(f"[AgentTrace] 🔮 Event override set for tool: {override_tool}")
+                print(f"[AgentTrace] [FORK] Event override set for tool: {override_tool}")
             else:
                 self.event_override = None
             
@@ -282,7 +349,7 @@ class Tracer:
             if event_overrides is not None:
                 import copy
                 self.event_overrides = copy.deepcopy(event_overrides)
-                print(f"[AgentTrace] 🔮 Multi-tool overrides set for: {list(event_overrides.keys())}")
+                print(f"[AgentTrace] [FORK] Multi-tool overrides set for: {list(event_overrides.keys())}")
             else:
                 self.event_overrides = {}
             
@@ -327,7 +394,7 @@ class Tracer:
                     org_id = org_resp.json()[0]['id']
             
             if not org_id:
-                print("[AgentTrace] ⚠️ Could not determine Org ID for trace registration")
+                print("[AgentTrace] [WARN] Could not determine Org ID for trace registration")
                 return
 
             # 2. Insert Trace Record
@@ -336,9 +403,12 @@ class Tracer:
                 "org_id": org_id,
                 "title": os.path.basename(script_path) if script_path else "Untitled Trace",
                 "status": "ready",
+                "parent_trace_id": getattr(self, "source_trace_id", None),
+                "fork_step": getattr(self, "branch_fork_step", None),
                 "metadata": {
                     "sdk": "python",
-                    "version": "2.0.0"
+                    "version": "2.0.0",
+                    "is_branch": bool(getattr(self, "branch_id", None))
                 }
             }
             
@@ -354,17 +424,20 @@ class Tracer:
                 timeout=10
             )
             
-            if resp.status_code in (201, 204):
-                print(f"[AgentTrace] ✅ Trace registered in Supabase: {self.trace_id}")
+            if resp.status_code in (201, 204, 409):
+                if resp.status_code == 409:
+                    print(f"[AgentTrace] [INFO] Trace {self.trace_id} already exists in Supabase")
+                else:
+                    print(f"[AgentTrace] [OK] Trace registered in Supabase: {self.trace_id}")
             else:
-                print(f"[AgentTrace] ⚠ Trace registration failed: {resp.status_code} - {resp.text}")
+                print(f"[AgentTrace] [WARN] Trace registration failed: {resp.status_code} - {resp.text}")
 
             # 3. Upload Script to Storage
             if self.script_content:
                 self._upload_to_supabase_storage("traces", f"{self.trace_id}/script.py", self.script_content)
 
         except Exception as e:
-            print(f"[AgentTrace] ⚠ Supabase registration error: {e}")
+            print(f"[AgentTrace] [WARN] Supabase registration error: {e}")
 
     def _upload_to_supabase_storage(self, bucket: str, path: str, content: Any):
         """Helper to upload content to Supabase Storage."""
@@ -391,7 +464,7 @@ class Tracer:
             )
             
             if resp.ok:
-                print(f"[AgentTrace] ✅ Uploaded {path} to bucket '{bucket}'")
+                print(f"[AgentTrace] [OK] Uploaded {path} to bucket '{bucket}'")
                 return True
             else:
                 # Try PUT if POST fails (upsert might need different method or headers)
@@ -405,13 +478,13 @@ class Tracer:
                     timeout=15
                 )
                 if resp.ok:
-                    print(f"[AgentTrace] ✅ Updated {path} in bucket '{bucket}'")
+                    print(f"[AgentTrace] [OK] Updated {path} in bucket '{bucket}'")
                     return True
                 else:
-                    print(f"[AgentTrace] ❌ Storage upload failed: {resp.status_code} - {resp.text}")
+                    print(f"[AgentTrace] [ERROR] Storage upload failed: {resp.status_code} - {resp.text}")
                     return False
         except Exception as e:
-            print(f"[AgentTrace] ⚠ Storage upload error: {e}")
+            print(f"[AgentTrace] [WARN] Storage upload error: {e}")
             return False
 
     def try_consume_injected_result(self, tool_name: str) -> tuple:
@@ -448,7 +521,7 @@ class Tracer:
                 override_entry = self.event_overrides[tool_name]
                 override_payload = override_entry.get("payload", override_entry)
                 override_source = "multi"
-                print(f"[Injection] ✅ Found multi-tool override for {tool_name}")
+                print(f"[Injection] [OK] Found multi-tool override for {tool_name}")
             
             # Fall back to legacy single override
             elif hasattr(self, 'event_override') and self.event_override is not None:
@@ -463,13 +536,13 @@ class Tracer:
                 if override_type == "tool_end" and override_tool == tool_name:
                     override_payload = override_payload_raw
                     override_source = "legacy"
-                    print(f"[Injection] ✅ Found legacy override for {tool_name}")
+                    print(f"[Injection] [OK] Found legacy override for {tool_name}")
                 else:
-                    print(f"[Injection] ❌ Legacy override mismatch (expected tool_end/{tool_name})")
+                    print(f"[Injection] [ERROR] Legacy override mismatch (expected tool_end/{tool_name})")
             
             # No matching override found
             if override_payload is None:
-                print(f"[Injection] ❌ No override found for {tool_name}")
+                print(f"[Injection] [ERROR] No override found for {tool_name}")
                 return False, None
             
             # Parse the result from override
@@ -483,7 +556,7 @@ class Tracer:
                 except:
                     pass
             
-            print(f"[Injection] 🔮 APPLYING INJECTION for {tool_name}: {result}")
+            print(f"[Injection] [FORK] APPLYING INJECTION for {tool_name}: {result}")
             
             # Record the synthetic tool_end event
             seq = self._event_seq
@@ -548,40 +621,61 @@ class Tracer:
         except: pass
 
         with self._event_lock:
-            self.mode = Mode.REPLAY
-            self.replay_phase = ReplayPhase.APPLY
-            self.trace_id = trace_id
-            trace_dir = self._trace_dir(self.trace_id)
-            self._events_file_path = os.path.join(trace_dir, "events.jsonl")
+            # For Dashboard/Interactive Branching: Replays should often be recorded as NEW traces
+            # to allow the user to see the result.
+            self.source_trace_id = trace_id
             
-            # VFS RECONSTRUCTION: Populate VFS_FILES from trace history before going LIVE
-            if os.path.exists(self._events_file_path):
+            # If we are in a branch or forced via environment, generate a NEW ID for recording
+            if branch_data or os.environ.get("AGENTTRACE_RECORD_REPLAY") == "1":
+                self.trace_id = str(uuid.uuid4())
+                print(f"[AgentTrace] [BRANCH] Branching active: Recording replay to NEW trace {self.trace_id}")
+                self.mode = Mode.RECORD # We want to RECORD events as they re-execute
+                
+                # Register the new trace so the dashboard can follow it
+                self.api_key = os.environ.get("AGENTTRACE_API_KEY")
+                if self.api_key:
+                    self._register_trace_in_supabase(self.script_path)
+            else:
+                self.trace_id = trace_id
+                self.mode = Mode.REPLAY
+                
+            self.replay_phase = ReplayPhase.APPLY
+            
+            source_trace_dir = self._trace_dir(self.source_trace_id)
+            source_events_path = os.path.join(source_trace_dir, "events.jsonl")
+            
+            # Target dir for new recording
+            target_trace_dir = self._trace_dir(self.trace_id)
+            self._events_file_path = os.path.join(target_trace_dir, "events.jsonl")
+            
+            # VFS RECONSTRUCTION: Populate VFS_FILES from source history
+            if os.path.exists(source_events_path):
                 try:
                     import json
                     from agenttrace.core.replay import apply_event_to_state
                     from agenttrace.core.vfs_bridge import clear_vfs
                     clear_vfs()
-                    with open(self._events_file_path, "r", encoding="utf-8") as f:
+                    with open(source_events_path, "r", encoding="utf-8") as f:
                         for line in f:
                             try:
                                 ev = json.loads(line)
                                 # Pre-populate VFS bridge with all file_write events from history
-                                # This ensures standard 'open()' calls work during replay
                                 apply_event_to_state({}, ev)
                             except: pass
                 except Exception as vfs_err:
                     print(f"[AgentTrace] VFS reconstruction warning: {vfs_err}")
 
-            self.keyframes = self._load_keyframes(trace_id)
+            self.keyframes = self._load_keyframes(self.source_trace_id)
             self.branch_overrides = {}
             self.branch_id = None
             self.branch_fork_step = None
             self._events_mem = []
-            # load event seq from disk header if exists
-            self._event_seq = self._next_sequence_number_from_file()
-            # Load event log in memory lazily via _load_trace()
+            
+            # load event seq from disk header if exists (for re-using existing recording)
+            self._event_seq = self._next_sequence_number_from_file() if self.mode == Mode.RECORD else 0
+            
             if branch_data:
-                if branch_data.get("parent_trace_id") != trace_id:
+                if branch_data.get("parent_trace_id") != self.source_trace_id:
                     raise ValueError("Branch parent mismatch")
                 overrides = branch_data.get("overrides", {})
                 self.branch_overrides = {int(k): v for k, v in overrides.items()}
@@ -589,16 +683,93 @@ class Tracer:
                 self.branch_fork_step = branch_data.get("fork_step")
                 if target_step is None:
                     target_step = self.branch_fork_step
+            
             if target_step is not None:
                 self._jump_to_step(target_step)
             else:
                 self.replay_cursor = 0
             
             self.replay_phase = ReplayPhase.LIVE
-            print(f"[AgentTrace] Replay started: {trace_id} cursor={getattr(self,'replay_cursor',0)}")
+            print(f"[AgentTrace] Replay started: {self.source_trace_id} -> {self.trace_id} cursor={getattr(self,'replay_cursor',0)}")
+            # For the API to capture the new trace ID
+            if self.mode == Mode.RECORD:
+                print(f"[OK] Trace recorded: {self.trace_id}")
+
+    def consume_event(self, event_type: str, current_payload: Any) -> Any:
+        """
+        Called by patched functions in REPLAY mode.
+        Validates event type and payload, then returns recorded result.
+        """
+        if self.mode != Mode.REPLAY:
+            return None
+
+        # 0. Drain non-VFS events (async tasks, etc) until we hit a sync event or EOF
+        # This is CRITICAL for async/sync interleaving.
+        while True:
+            ev = self._read_event_by_seq(self.replay_cursor)
+            if ev is None:
+                raise ReplayError(f"Replay EOF: Expected event {event_type} at seq {self.replay_cursor} but reached end of history.")
+            
+            recorded_type = ev.get("type")
+            
+            # If matches expected type (or is a valid alias), break loop to validate
+            if recorded_type == event_type:
+                break
+            # Alias check
+            if {recorded_type, event_type} <= {"file_rename", "dir_rename"}:
+                break
+                
+            # If it's a VFS event but NOT the one we want calling -> Divergence
+            if recorded_type in ("file_write", "file_remove", "file_rename", "dir_rename", "makedirs", "rmdir", "file_exists", "file_isdir"):
+                 raise ReplayError(f"Replay divergence: VFS mismatch. Expected {event_type}, found {recorded_type} at seq {self.replay_cursor}")
+            
+            # Otherwise, it's a passive event (async, log, etc).
+            # We must consume it silently (or validate it if possible) and continue.
+            # STRICT: We still validate it against handlers!
+            handlers = self._get_replay_handlers()
+            if recorded_type not in handlers:
+                 raise ReplayError(f"Unknown event type in history: {recorded_type} (seq {self.replay_cursor})")
+            
+            # Validate passive event
+            handler = handlers.get(recorded_type)
+            if handler:
+                handler(ev.get("payload"), {}) 
+            
+            # Advance past passive event
+            self.replay_cursor += 1
+            
+        # --- End Drain Loop ---
+        
+        # Now we are at the matching event.
+        # 1. Fetch again (it's the same ev from break)
+        ev = self._read_event_by_seq(self.replay_cursor)
+        recorded_type = ev.get("type")
+        recorded_payload = ev.get("payload")
+        
+        # 2. Enforce Handler Existence
+        handlers = self._get_replay_handlers()
+        if recorded_type not in handlers:
+             raise ReplayError(f"Unknown event type in history: {recorded_type} (seq {self.replay_cursor})")
+
+        # 3. Match Event Type
+        if recorded_type != event_type:
+            if not ({recorded_type, event_type} <= {"file_rename", "dir_rename"}):
+                raise ReplayError(f"Replay divergence: Expected {event_type} but found {recorded_type} at seq {self.replay_cursor}")
+
+        # 4. Invoke Handler for Validation
+        handler = handlers.get(recorded_type)
+        if handler:
+            cleaned_current = self._make_deterministic(current_payload)
+            handler(recorded_payload, cleaned_current)
+
+        # 5. Advance Cursor
+        self.replay_cursor += 1
+        
+        # 6. Return recorded result
+        return recorded_payload.get("result")
 
     def stop(self):
-        """Flush and close resources — call on worker shutdown."""
+        """Flush and close resources  call on worker shutdown."""
         # Ensure we have the script content before closing
         if not self.script_content and self.script_path and os.path.exists(self.script_path):
              try:
@@ -625,6 +796,7 @@ class Tracer:
                     pass
                 self._sync_thread = None
 
+            was_recording = (self.mode == Mode.RECORD)
             self.mode = Mode.OFF
             
             # Teardown VFS Patcher
@@ -634,25 +806,34 @@ class Tracer:
                 print("[AgentTrace] VFS Patcher deactivated")
 
             self.replay_phase = ReplayPhase.CLEANUP
+            self.replay_phase = ReplayPhase.CLEANUP
             VFS_FILES.clear()
+            
+            # STRICT DETERMINISM CHECK
+            # If we were replaying, ensure we consumed EVERYTHING.
+            if self.mode == Mode.REPLAY and not self._closed:
+                 # Check if history has more events
+                 next_ev = self._read_event_by_seq(getattr(self, "replay_cursor", 0))
+                 if next_ev is not None:
+                     print(f"[AgentTrace] [ERROR] Replay ended prematurely! Unconsumed event at seq {self.replay_cursor}")
+                     # We can't easily raise here since stop() is often called in finally blocks or atexit
+                     # But we should log it loudly.
+                     # raise ReplayError("Replay incomplete") 
+
             self._closed = True
             print("[AgentTrace] stopped and flushed")
         
-        # UPLOAD TO SUPABASE (Phase 4)
-        if os.environ.get("NEXT_PUBLIC_SUPABASE_URL"):
-            # 1. Upload events.jsonl
-            events_path = os.path.join(self._trace_dir(trace_id_copy), "events.jsonl")
-            if os.path.exists(events_path):
-                with open(events_path, "rb") as f:
-                    self._upload_to_supabase_storage("traces", f"{trace_id_copy}/events.jsonl", f.read())
+        # UPLOAD TO SUPABASE (Phase 12: Layer 2 Sync)
+        if was_recording and self.synchronizer:
+            # 0. Update metadata with final stats
+            self._update_final_metadata(trace_id_copy, success=True)
             
-            # 2. Upload metadata
-            metadata_path = os.path.join(self._trace_dir(trace_id_copy), "metadata.json")
-            if os.path.exists(metadata_path):
-                with open(metadata_path, "rb") as f:
-                    self._upload_to_supabase_storage("traces", f"{trace_id_copy}/metadata.json", f.read())
-            
-            print(f"[AgentTrace] ✅ Final sync to Supabase complete: {trace_id_copy}")
+            # Non-blocking or blocking? For now blocking to ensure data safety.
+            # In V2 we can make this background if process doesn't exit.
+            try:
+                self.synchronizer.upload_trace(trace_id_copy, self._trace_dir(trace_id_copy))
+            except Exception as e:
+                print(f"[AgentTrace] [ERROR] Cloud sync failed: {e}")
 
     # -----------------------
     # Event recording & storage
@@ -670,6 +851,10 @@ class Tracer:
             with self._event_lock:
                 seq = self._event_seq
                 self._event_seq += 1
+
+                # REPLAY MODE: Redirect to consume_event
+                if self.mode == Mode.REPLAY:
+                    return self.consume_event(event_type, payload)
 
                 # Fork Logic: Silent Fast Forward
                 # If we are in a fork and this step is already in history, skip recording it.
@@ -736,8 +921,11 @@ class Tracer:
                 self._save_metadata()
 
             # Queue for cloud sync if enabled
-            if self._sync_thread and self._sync_thread.is_alive():
-                self._sync_queue.put(event)
+            if self.api_key:
+                self._ensure_sync_worker_running()
+                if self._sync_thread and self._sync_thread.is_alive():
+                    self._sync_queue.put(event)
+                    # print(f"[AgentTrace] Debug: Event {event_type} queued for sync")
 
             return event["seq"]
 
@@ -859,7 +1047,7 @@ class Tracer:
                     return # Looks ok ending in newline
                 
                 # If not ending in newline, we might have partial write
-                print(f"[AgentTrace] ⚠️ Detected potential corruption/partial write in {path}. Attempting repair...")
+                print(f"[AgentTrace] [WARN] Detected potential corruption/partial write in {path}. Attempting repair...")
                 
                 # Scan backwards for last newline
                 f.seek(0, os.SEEK_END)
@@ -872,7 +1060,7 @@ class Tracer:
                         # Found valid end of previous line
                         f.seek(pos + 1)
                         f.truncate()
-                        print(f"[AgentTrace] ✅ Repaired file by truncating to {pos+1}")
+                        print(f"[AgentTrace] [OK] Repaired file by truncating to {pos+1}")
                         return
                     pos -= 1
                 
@@ -1000,6 +1188,55 @@ class Tracer:
         except Exception as e:
             print(f"[AgentTrace] failed to save metadata: {e}")
 
+    def _update_final_metadata(self, trace_id: str, success: bool = True):
+        """Update metadata.json with final duration, event count, and status."""
+        try:
+            path = os.path.join(self._trace_dir(trace_id), "metadata.json")
+            if not os.path.exists(path):
+                return
+            
+            with open(path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            
+            # Update fields
+            if self.start_time:
+                meta["duration_s"] = time_module.time() - self.start_time
+            
+            meta["event_count"] = self._event_seq
+            meta["status"] = "completed" if success else "failed"
+            meta["host_info"] = {
+                "platform": sys.platform,
+                "python": sys.version.split()[0],
+                "pid": os.getpid()
+            }
+            # Infer title from script path
+            if self.script_path:
+                meta["title"] = os.path.basename(self.script_path)
+            
+            _atomic_write(path, json.dumps(meta, ensure_ascii=False).encode("utf-8"))
+        except Exception as e:
+            print(f"[AgentTrace] failed to update final metadata: {e}")
+
+    def _ensure_sync_worker_running(self):
+        """Start background sync thread if not already running."""
+        if not self.api_key or not self.trace_id:
+            return
+
+        with self._event_lock:
+            if self._sync_thread is None or not self._sync_thread.is_alive():
+                print("[AgentTrace] Starting cloud sync worker thread...")
+                self._stop_sync.clear()
+                self._sync_thread = threading.Thread(
+                    target=self._cloud_sync_worker,
+                    daemon=True,
+                    name="AgentTraceSync"
+                )
+                self._sync_thread.start()
+                self.last_flush_time = time_module.time()
+                
+                # Check for any previously unsent events
+                threading.Thread(target=self._sync_failover_queue, daemon=True, name="AgentTraceFailover").start()
+
     def _load_metadata(self, trace_id: str) -> dict:
         path = os.path.join(self._trace_dir(trace_id), "metadata.json")
         if not os.path.exists(path):
@@ -1026,6 +1263,7 @@ class Tracer:
                 try:
                     event = self._sync_queue.get(timeout=0.5)
                     batch.append(event)
+                    print(f"[AgentTrace] Debug: Sync worker got event from queue (Batch size: {len(batch)})")
                 except queue.Empty:
                     pass  # No event, check flush conditions
                 
@@ -1065,8 +1303,9 @@ class Tracer:
                             batch = []
                             self.last_flush_time = current_time
                         else:
-                            # Give up on this batch to prevent memory leak
-                            print(f"[AgentTrace] ❌ Lost {len(batch)} events after retry")
+                            # FAILOVER: Save to local disk instead of dropping
+                            print(f"[AgentTrace] [ERROR] Sync failed after retries. Saving {len(batch)} events to local failover queue.")
+                            self._append_to_failover(batch)
                             batch = []
             
             except Exception as e:
@@ -1082,12 +1321,13 @@ class Tracer:
     def _flush_batch(self, events: List[Dict[str, Any]]) -> bool:
         """Upload batch of events to the plural events endpoint."""
         if not self.api_key or not self.trace_id:
-            print(f"[AgentTrace] ⚠️ Skip flush: api_key={bool(self.api_key)} trace_id={bool(self.trace_id)}")
+            if not self.api_key: print("[AgentTrace] [WARN] Missing AGENTTRACE_API_KEY")
+            if not self.trace_id: print("[AgentTrace] [WARN] Missing trace_id")
             return False
             
         try:
             url = f"{self.api_url}/sdk/trace/events"
-            print(f"[AgentTrace] 📤 Syncing {len(events)} events to {url}...")
+            print(f"[AgentTrace] [SYNC] Syncing {len(events)} events to {url}...")
             resp = requests.post(
                 url,
                 json={
@@ -1106,10 +1346,10 @@ class Tracer:
                 timeout=10
             )
             if not resp.ok:
-                print(f"[AgentTrace] ❌ Sync failed: {resp.status_code} - {resp.text}")
+                print(f"[AgentTrace] [ERROR] Sync failed: {resp.status_code} - {resp.text}")
             return resp.ok
         except Exception as e:
-            print(f"[AgentTrace] ❌ Sync error: {e}")
+            print(f"[AgentTrace] [ERROR] Sync error: {e}")
             return False
 
     def _finalize_cloud_trace(self, trace_id: str, script_content: Optional[str], script_path: Optional[str]):
@@ -1134,11 +1374,11 @@ class Tracer:
                 timeout=20
             )
             if resp.ok:
-                print(f"[AgentTrace] ✅ Cloud trace finalized!")
+                print(f"[AgentTrace] [OK] Cloud trace finalized!")
             else:
-                print(f"[AgentTrace] ⚠ Cloud finalization failed: {resp.status_code}")
+                print(f"[AgentTrace] [WARN] Cloud finalization failed: {resp.status_code}")
         except Exception as e:
-            print(f"[AgentTrace] ⚠ Cloud finalization error: {e}")
+            print(f"[AgentTrace] [WARN] Cloud finalization error: {e}")
 
     def _upload_script_to_cloud(self, trace_id: str, script_content: Optional[str], script_path: Optional[str]):
         """Auto-upload script to cloud storage for Replay support.
@@ -1157,7 +1397,7 @@ class Tracer:
                 content_str = f.read()
         
         if not content_str:
-            print(f"[AgentTrace] ⚠ No script content to upload for trace {trace_id[:8]}")
+            print(f"[AgentTrace] [WARN] No script content to upload for trace {trace_id[:8]}")
             return
         
         # Method 1: API Key auth (preferred - simple for users)
@@ -1178,12 +1418,12 @@ class Tracer:
                     timeout=30
                 )
                 if response.ok:
-                    print(f"[AgentTrace] ✅ Script synced to cloud via API ({trace_id[:8]})")
+                    print(f"[AgentTrace] [OK] Script synced to cloud via API ({trace_id[:8]})")
                     return
                 else:
-                    print(f"[AgentTrace] ⚠ API sync failed: {response.status_code}")
+                    print(f"[AgentTrace] [WARN] API sync failed: {response.status_code}")
             except Exception as e:
-                print(f"[AgentTrace] ⚠ API sync error: {e}")
+                print(f"[AgentTrace] [WARN] API sync error: {e}")
         
         # Method 2: Direct Supabase (fallback)
         supabase_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
@@ -1201,19 +1441,19 @@ class Tracer:
                     client.storage.from_("traces").upload(
                         dest_path, content_bytes, {"content-type": "text/x-python", "upsert": "true"}
                     )
-                    print(f"[AgentTrace] ✅ Script uploaded to Supabase ({trace_id[:8]})")
+                    print(f"[AgentTrace] [OK] Script uploaded to Supabase ({trace_id[:8]})")
                 except Exception as upload_err:
                     if "already exists" in str(upload_err).lower():
                         client.storage.from_("traces").update(
                             dest_path, content_bytes, {"content-type": "text/x-python"}
                         )
-                        print(f"[AgentTrace] ✅ Script updated in Supabase ({trace_id[:8]})")
+                        print(f"[AgentTrace] [OK] Script updated in Supabase ({trace_id[:8]})")
                     else:
                         raise
             except ImportError:
                 pass
             except Exception as e:
-                print(f"[AgentTrace] ⚠ Supabase upload failed: {e}")
+                print(f"[AgentTrace] [WARN] Supabase upload failed: {e}")
 
     def _upload_script_sync(self, script_content: str, timeout: int = 10) -> bool:
         """
@@ -1369,6 +1609,78 @@ class Tracer:
             return state
 
     # -----------------------
+    def _append_to_failover(self, events: List[Dict[str, Any]]):
+        """Save events to a local failover file to be synced later."""
+        if not self.trace_id:
+            return
+        
+        failover_path = os.path.join(self.storage_root, "unsent_events.jsonl")
+        try:
+            with open(failover_path, "a", encoding="utf-8") as f:
+                for ev in events:
+                    # Mark which trace this belongs to so we can sync it correctly later
+                    ev["_trace_id"] = self.trace_id
+                    f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+            print(f"[AgentTrace] [OK] Persisted {len(events)} events to {failover_path}")
+        except Exception as e:
+            print(f"[AgentTrace] [ERROR] Failed to write to failover queue: {e}")
+
+    def _sync_failover_queue(self):
+        """Attempt to sync any events stored in the failover queue."""
+        failover_path = os.path.join(self.storage_root, "unsent_events.jsonl")
+        if not os.path.exists(failover_path) or not self.api_key:
+            return
+
+        print(f"[AgentTrace] [SYNC] Checking failover queue: {failover_path}")
+        try:
+            # Read all lines
+            with open(failover_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            
+            if not lines:
+                return
+
+            # Group by trace_id
+            groups: Dict[str, List[dict]] = {}
+            for line in lines:
+                try:
+                    ev = json.loads(line)
+                    tid = ev.pop("_trace_id", self.trace_id)
+                    if tid not in groups: groups[tid] = []
+                    groups[tid].append(ev)
+                except:
+                    continue
+            
+            # Try to sync each group
+            remaining_lines = []
+            for tid, group_events in groups.items():
+                print(f"[AgentTrace] [SYNC] Attempting recovery for trace {tid[:8]} ({len(group_events)} events)")
+                
+                # Temporarily swap trace_id for flush_batch
+                original_tid = self.trace_id
+                self.trace_id = tid
+                success = self._flush_batch(group_events)
+                self.trace_id = original_tid
+
+                if not success:
+                    # Still failing, keep in queue
+                    for ev in group_events:
+                        ev["_trace_id"] = tid
+                        remaining_lines.append(json.dumps(ev, ensure_ascii=False) + "\n")
+            
+            # Rewrite failover file with remaining events
+            if len(remaining_lines) != len(lines):
+                with open(failover_path, "w", encoding="utf-8") as f:
+                    f.writelines(remaining_lines)
+                
+                if not remaining_lines:
+                    print("[AgentTrace] [OK] Failover queue fully cleared.")
+                else:
+                    print(f"[AgentTrace] [INFO] Failover queue partially cleared ({len(remaining_lines)} remaining).")
+                    
+        except Exception as e:
+            print(f"[AgentTrace] [ERROR] Failover recovery error: {e}")
+
     # Helpers for RNG capture (used by CheckpointManager)
     # -----------------------
     def capture_runtime_state(self) -> dict:
@@ -1384,3 +1696,32 @@ class Tracer:
             except Exception:
                 rt["numpy_random"] = "<error>"
         return rt
+
+    def _update_final_metadata(self, trace_id: str, success: bool = True):
+        """Update metadata.json with final duration, event count, and status."""
+        try:
+            path = os.path.join(self._trace_dir(trace_id), "metadata.json")
+            if not os.path.exists(path):
+                return
+            
+            with open(path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            
+            # Update fields
+            if getattr(self, "start_time", None):
+                meta["duration_s"] = time_module.time() - self.start_time
+            
+            meta["event_count"] = self._event_seq
+            meta["status"] = "completed" if success else "failed"
+            meta["host_info"] = {
+                "platform": sys.platform,
+                "python": sys.version.split()[0],
+                "pid": os.getpid()
+            }
+            # Infer title from script path
+            if self.script_path:
+                meta["title"] = os.path.basename(self.script_path)
+            
+            _atomic_write(path, json.dumps(meta, ensure_ascii=False).encode("utf-8"))
+        except Exception as e:
+            print(f"[AgentTrace] failed to update final metadata: {e}")

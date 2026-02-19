@@ -69,7 +69,7 @@ class AgentBase:
     # ------------------------------------------------
     def load_state(self, state: Dict[str, Any]):
         """
-        Restore logical agent state — safe for replay.
+        Restore logical agent state  safe for replay.
         Note: This does NOT resume Python stack/frames (not possible).
         """
 

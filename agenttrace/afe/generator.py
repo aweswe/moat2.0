@@ -160,7 +160,7 @@ class CandidateGenerator:
 
         # 3. Try LLM for unknown/complex errors
         if not candidates and self.llm and (trace_context or ctx):
-            print(f"🤖 AFE: Attempting LLM fix generation for {root}...")
+            print(f" AFE: Attempting LLM fix generation for {root}...")
             llm_candidate = self.llm.generate_fix(
                 rca_result, trace_context, error_details, detection_id, ctx
             )
@@ -189,7 +189,7 @@ class CandidateGenerator:
         variables = rca.variables
         missing = [r for r in template["requirements"] if r not in variables]
         if missing:
-            print(f"⚠️ AFE: Missing template vars for {root_cause}: {missing}")
+            print(f"[WARN] AFE: Missing template vars for {root_cause}: {missing}")
             return None
         
         # Fill template
@@ -214,7 +214,7 @@ class CandidateGenerator:
                 }
             )
         except KeyError as e:
-            print(f"⚠️ AFE: Template key error: {e}")
+            print(f"[WARN] AFE: Template key error: {e}")
             return None
 
     def _generate_defensive_wrap(

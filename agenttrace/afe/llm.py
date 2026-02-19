@@ -37,7 +37,7 @@ class LLMFixGenerator:
             return None
 
         prompt = self._construct_prompt(rca_result, trace_context, error_details, ctx)
-        print(f"🔍 DEBUG: LLM Prompt:\n{prompt}\n--------------------------------")
+        print(f"[SEARCH] DEBUG: LLM Prompt:\n{prompt}\n--------------------------------")
         
         try:
             completion = self.client.chat.completions.create(
@@ -61,26 +61,26 @@ class LLMFixGenerator:
         return """You are an expert Python debugger. Generate PRECISE code patches.
 
 === FORBIDDEN PATTERNS (NEVER generate these) ===
-❌ except Exception as e: pass
-❌ try: ... except: print(e)
-❌ Generic catch-all wrappers
-❌ Invented variable names not in LOCALS
-❌ except Exception without specific handling
-❌ Wrapping entire functions in try/except
+[ERROR] except Exception as e: pass
+[ERROR] try: ... except: print(e)
+[ERROR] Generic catch-all wrappers
+[ERROR] Invented variable names not in LOCALS
+[ERROR] except Exception without specific handling
+[ERROR] Wrapping entire functions in try/except
 
 === REQUIRED OUTPUT ===
-✅ Use ONLY variables from the LOCALS section
-✅ Place guards BEFORE the failing line
-✅ Use the EXACT variable names shown
-✅ Generate minimal, surgical patches
+[OK] Use ONLY variables from the LOCALS section
+[OK] Place guards BEFORE the failing line
+[OK] Use the EXACT variable names shown
+[OK] Generate minimal, surgical patches
 
 === EXCEPTION-SPECIFIC STRATEGIES ===
-- ZeroDivisionError → if denominator == 0: raise ValueError("...")
-- KeyError → if "key" not in dict_name: raise KeyError("...")
-- TypeError → if not isinstance(var, expected_type): raise TypeError("...")
-- IndexError → if index >= len(sequence): raise IndexError("...")
-- AttributeError → if obj is None: raise ValueError("...")
-- FileNotFoundError → from pathlib import Path; if not Path(x).exists(): ...
+- ZeroDivisionError  if denominator == 0: raise ValueError("...")
+- KeyError  if "key" not in dict_name: raise KeyError("...")
+- TypeError  if not isinstance(var, expected_type): raise TypeError("...")
+- IndexError  if index >= len(sequence): raise IndexError("...")
+- AttributeError  if obj is None: raise ValueError("...")
+- FileNotFoundError  from pathlib import Path; if not Path(x).exists(): ...
 
 === OUTPUT JSON SCHEMA ===
 {
