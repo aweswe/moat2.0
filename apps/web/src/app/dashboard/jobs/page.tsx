@@ -48,9 +48,12 @@ export default function JobsPage() {
                             <span className="font-mono text-[10px] uppercase tracking-[0.2em]">Synchronizing_Worker_Queue...</span>
                         </div>
                     ) : jobs.length === 0 ? (
-                        <div className="p-24 text-center opacity-30 border-2 border-dashed border-border m-6 rounded-2xl">
-                            <div className="font-mono text-xs uppercase mb-2">QUEUE_EMPTY</div>
-                            <p className="text-[10px] italic">No active or historical jobs found in the worker stack.</p>
+                        <div className="p-16 text-center">
+                            <Zap className="w-10 h-10 mx-auto mb-4 text-brand opacity-20" />
+                            <div className="text-sm font-semibold mb-1 opacity-60">No active jobs</div>
+                            <p className="text-[10px] text-muted-foreground max-w-[280px] mx-auto">
+                                Replay jobs will appear here when triggered from a trace detail page.
+                            </p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 divide-y divide-border/50 font-mono text-xs">

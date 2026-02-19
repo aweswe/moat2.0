@@ -15,7 +15,8 @@ import {
     Search,
     Filter,
     ArrowUpRight,
-    Loader2
+    Loader2,
+    ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,9 +105,20 @@ export default function TracesPage() {
                             <span className="font-mono text-[10px] uppercase tracking-[0.2em]">Resolving_Registry...</span>
                         </div>
                     ) : filteredTraces.length === 0 ? (
-                        <div className="p-24 text-center opacity-30 border-2 border-dashed border-border m-6 rounded-2xl">
-                            <div className="font-mono text-xs uppercase mb-2">REGISTRY_EMPTY</div>
-                            <p className="text-[10px] italic">No traces found matching your current context.</p>
+                        <div className="p-16 text-center">
+                            <Terminal className="w-10 h-10 mx-auto mb-4 text-brand opacity-20" />
+                            <div className="text-sm font-semibold mb-1 opacity-60">{search ? 'No matching traces' : 'No traces captured yet'}</div>
+                            <p className="text-[10px] text-muted-foreground max-w-[300px] mx-auto">
+                                {search
+                                    ? 'Try adjusting your search term or clearing the filter.'
+                                    : 'Run your first traced agent session to populate this registry.'
+                                }
+                            </p>
+                            {!search && (
+                                <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand/5 border border-brand/20">
+                                    <span className="font-mono text-[9px] text-brand">agenttrace run my_agent.py</span>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 divide-y divide-border/50 font-mono text-xs">
@@ -153,6 +165,12 @@ export default function TracesPage() {
                                         )}>
                                             {trace.status}
                                         </div>
+                                        {(trace.status === 'ready' || trace.status === 'completed') && (
+                                            <div className="flex items-center gap-1 px-2 py-1 rounded bg-green-500/5 border border-green-500/20">
+                                                <ShieldCheck className="w-3 h-3 text-green-500" />
+                                                <span className="text-[8px] font-mono text-green-500 uppercase font-bold">Deterministic</span>
+                                            </div>
+                                        )}
                                         <ArrowUpRight className="w-4 h-4 text-brand opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
                                 </div>

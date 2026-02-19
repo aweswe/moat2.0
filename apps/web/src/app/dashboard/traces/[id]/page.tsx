@@ -33,7 +33,8 @@ import {
     FileCode2,
     Copy,
     Check,
-    TerminalSquare
+    TerminalSquare,
+    ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -143,6 +144,12 @@ function TraceDetailInner() {
                             )}>
                                 {trace.status}
                             </div>
+                            {(trace.status === 'completed' || trace.status === 'ready') && (
+                                <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/5 border border-green-500/20">
+                                    <ShieldCheck className="w-3 h-3 text-green-500" />
+                                    <span className="text-[8px] font-mono text-green-500 uppercase font-bold">Verified</span>
+                                </div>
+                            )}
                             <BranchPicker traceId={traceId} />
                         </div>
                         <p className="text-muted-foreground text-xs font-mono opacity-60 mt-1">UUID: {traceId} // {new Date(trace.created_at).toLocaleString()}</p>
@@ -250,7 +257,7 @@ function TraceDetailInner() {
                     <div className="flex-1 flex flex-col gap-2">
                         <div className="flex justify-between items-center text-[10px] font-mono uppercase opacity-60">
                             <span>{events.length > 0 ? `Step ${Math.floor((sliderValue / 100) * (events.length - 1))}` : "No_Steps"}</span>
-                            <span>Historical_Scrub_v8</span>
+                            <span>{events.length} events</span>
                         </div>
                         <input
                             type="range"

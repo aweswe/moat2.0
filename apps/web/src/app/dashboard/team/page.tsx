@@ -51,9 +51,12 @@ export default function TeamPage() {
                             <span className="font-mono text-[10px] uppercase tracking-[0.2em]">Resolving_Fleet...</span>
                         </div>
                     ) : members.length === 0 ? (
-                        <div className="p-24 text-center opacity-30 border-2 border-dashed border-border m-6 rounded-2xl">
-                            <div className="font-mono text-xs uppercase mb-2">OPERATOR_LIST_EMPTY</div>
-                            <p className="text-[10px] italic">No operators currently registered in this space.</p>
+                        <div className="p-16 text-center">
+                            <Users className="w-10 h-10 mx-auto mb-4 text-brand opacity-20" />
+                            <div className="text-sm font-semibold mb-1 opacity-60">No team members yet</div>
+                            <p className="text-[10px] text-muted-foreground max-w-[280px] mx-auto">
+                                Invite your first team member to collaborate on trace debugging.
+                            </p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 divide-y divide-border/50 font-mono text-xs">
