@@ -5,6 +5,7 @@ import { GitBranch, GitMerge, Hash, AlertTriangle, CheckCircle2, ChevronDown, Ch
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 
 interface TraceEvent {
     seq: number;
@@ -128,22 +129,29 @@ export function MultiverseView({ traceId, baseEvents, branch }: MultiverseViewPr
         setLoading(true);
         setError(null);
 
-        fetch("/api/replay", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ traceId, branch: branch.id }),
-        })
-            .then(r => r.json())
-            .then(data => {
+        (async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const res = await fetch("/api/replay", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${session?.access_token || ""}`
+                    },
+                    body: JSON.stringify({ traceId, branch: branch.id }),
+                });
+                const data = await res.json();
                 if (!data.success) throw new Error(data.details || data.error);
                 setBranchEvents(data.events || []);
-                // Verify parent hash integrity
                 if (branch.parentHash && data.parentHash) {
                     setHashMatch(branch.parentHash === data.parentHash);
                 }
-            })
-            .catch(e => setError(e.message))
-            .finally(() => setLoading(false));
+            } catch (e: any) {
+                setError(e.message);
+            } finally {
+                setLoading(false);
+            }
+        })();
     }, [traceId, branch?.id]);
 
     const diffRows = computeDiff(baseEvents, branchEvents, branch.forkStep);

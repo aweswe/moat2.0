@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 export async function GET(req: NextRequest) {
     try {
@@ -9,7 +10,49 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Missing traceId" }, { status: 400 });
         }
 
-        // Try downloading script.py first (new convention)
+        // 1. Auth verification
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+        const supabaseRest = createClient(supabaseUrl!, supabaseAnonKey, {
+            auth: { persistSession: false }
+        });
+
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: authError } = await supabaseRest.auth.getUser(token);
+
+        if (authError || !user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // 2. Org isolation
+        const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('organization_id')
+            .eq('user_id', user.id)
+            .single();
+
+        if (!profile?.organization_id) {
+            return NextResponse.json({ error: "No organization found" }, { status: 403 });
+        }
+
+        // 3. Verify trace belongs to user's org
+        const { data: trace } = await supabaseAdmin
+            .from('traces')
+            .select('id')
+            .eq('id', traceId)
+            .eq('org_id', profile.organization_id)
+            .single();
+
+        if (!trace) {
+            return NextResponse.json({ error: "Not found" }, { status: 404 });
+        }
+
+        // 4. Fetch script
         const { data: scriptData, error: scriptError } = await supabaseAdmin.storage
             .from("traces")
             .download(`${traceId}/script.py`);
@@ -19,7 +62,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ script: text, source: "script.py" });
         }
 
-        // Fallback: extract from metadata.json (old convention)
+        // Fallback: extract from metadata.json
         const { data: metaData, error: metaError } = await supabaseAdmin.storage
             .from("traces")
             .download(`${traceId}/metadata.json`);

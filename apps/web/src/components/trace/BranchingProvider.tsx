@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
 
 interface Branch {
     id: string;
@@ -29,7 +30,12 @@ export function BranchingProvider({ children }: { children: React.ReactNode }) {
 
     const refreshBranches = async (traceId: string) => {
         try {
-            const res = await fetch(`/api/branches?traceId=${traceId}`);
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch(`/api/branches?traceId=${traceId}`, {
+                headers: {
+                    "Authorization": `Bearer ${session?.access_token || ""}`
+                }
+            });
             if (!res.ok) throw new Error("Failed to fetch branches");
             const data = await res.json();
             setBranches(data.branches || []);
@@ -41,9 +47,13 @@ export function BranchingProvider({ children }: { children: React.ReactNode }) {
     const createBranch = async (traceId: string, forkStep: number, name?: string, overridePayload?: any) => {
         setIsLoading(true);
         try {
+            const { data: { session } } = await supabase.auth.getSession();
             const res = await fetch("/api/branches", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${session?.access_token || ""}`
+                },
                 body: JSON.stringify({ traceId, forkStep, name, overridePayload }),
             });
 

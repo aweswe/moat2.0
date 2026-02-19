@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrganization } from "@/hooks/use-database";
@@ -23,12 +25,15 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
-    const { user } = useAuth();
+    const { user, hasPermission } = useAuth();
     const { organization, loading, updateOrg } = useOrganization(user?.organizationId);
 
     const [name, setName] = React.useState("");
     const [slug, setSlug] = React.useState("");
     const [updating, setUpdating] = React.useState(false);
+
+    const canUpdate = hasPermission('invite_member'); // Using owner-level permission as proxy for org updates
+    const canViewSecrets = user?.role !== 'viewer';
 
     React.useEffect(() => {
         if (organization) {
@@ -103,7 +108,8 @@ export default function SettingsPage() {
                             size="sm"
                             className="font-mono text-[10px] uppercase w-fit"
                             onClick={handleUpdate}
-                            disabled={updating}
+                            disabled={updating || !canUpdate}
+                            title={!canUpdate ? "Only organization owners can update settings" : ""}
                         >
                             {updating ? "Syncing..." : "Update_Config"}
                         </Button>
@@ -120,28 +126,38 @@ export default function SettingsPage() {
                             <CardDescription className="text-xs">Keys for CLI and SDK integration.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="grid gap-2">
-                                <Label className="text-[10px] font-mono uppercase opacity-60">Secret Key</Label>
-                                <div className="relative">
-                                    <Input
-                                        value={organization?.id ? `at_live_${organization.id.replace(/-/g, '')}` : "NOT_PROVISIONED"}
-                                        readOnly
-                                        className="pr-10 bg-black/20 border-white/10 font-mono text-xs blur-sm hover:blur-none transition-all cursor-pointer"
-                                    />
-                                    <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-white"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(`at_live_${organization?.id?.replace(/-/g, '')}`);
-                                            toast.success("Key copied to clipboard.");
-                                        }}
-                                    >
-                                        <CloudCog className="w-3 h-3" />
-                                    </Button>
+                            {canViewSecrets ? (
+                                <>
+                                    <div className="grid gap-2">
+                                        <Label className="text-[10px] font-mono uppercase opacity-60">Secret Key</Label>
+                                        <div className="relative">
+                                            <Input
+                                                value={organization?.id ? `at_live_${organization.id.replace(/-/g, '')}` : "NOT_PROVISIONED"}
+                                                readOnly
+                                                className="pr-10 bg-black/20 border-white/10 font-mono text-xs blur-sm hover:blur-none transition-all cursor-pointer"
+                                            />
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-white"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(`at_live_${organization?.id?.replace(/-/g, '')}`);
+                                                    toast.success("Key copied to clipboard.");
+                                                }}
+                                            >
+                                                <CloudCog className="w-3 h-3" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    <p className="text-[9px] text-muted-foreground italic uppercase">Never share your secret key in frontend applications.</p>
+                                </>
+                            ) : (
+                                <div className="p-6 text-center border border-dashed border-border rounded-lg bg-black/20">
+                                    <Shield className="w-6 h-6 mx-auto mb-2 text-muted-foreground opacity-20" />
+                                    <p className="text-[10px] text-muted-foreground uppercase font-mono">Hidden by Policy</p>
+                                    <p className="text-[8px] opacity-40 mt-1">Contact your organization owner to access API keys.</p>
                                 </div>
-                            </div>
-                            <p className="text-[9px] text-muted-foreground italic uppercase">Never share your secret key in frontend applications.</p>
+                            )}
                         </CardContent>
                     </Card>
 

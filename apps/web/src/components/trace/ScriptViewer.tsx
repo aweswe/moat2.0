@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileCode2, Loader2, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 
 interface ScriptViewerProps {
     traceId: string;
@@ -21,7 +22,12 @@ export default function ScriptViewer({ traceId, highlightLine, className }: Scri
             setLoading(true);
             setError(null);
             try {
-                const res = await fetch(`/api/trace/script?traceId=${traceId}`);
+                const { data: { session } } = await supabase.auth.getSession();
+                const res = await fetch(`/api/trace/script?traceId=${traceId}`, {
+                    headers: {
+                        "Authorization": `Bearer ${session?.access_token || ""}`
+                    }
+                });
                 const data = await res.json();
                 if (res.ok && data.script) {
                     setScript(data.script);

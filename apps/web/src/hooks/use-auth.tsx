@@ -9,6 +9,7 @@ interface User {
     email: string;
     name: string;
     organizationId?: string | null;
+    role: 'owner' | 'dev' | 'viewer';
 }
 
 interface AuthContextType {
@@ -16,6 +17,7 @@ interface AuthContextType {
     loading: boolean;
     signIn: (email: string) => Promise<void>;
     signOut: () => Promise<void>;
+    hasPermission: (action: 'view_traces' | 'create_branch' | 'invite_member' | 'delete_trace') => boolean;
 }
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
@@ -50,12 +52,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         // 1. Get initial session immediately to avoid flicker
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
             handleAuthChange(session);
         });
 
         // 2. Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
             // Note: onAuthStateChange might fire INITIAL_SESSION immediately too, 
             // causing double-fire. But mapSupabaseUser should be idempotent enough 
             // or we can debounce.
@@ -107,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // Default Org ID from diag_db.py
                 const defaultOrgId = "6cb9b31b-1678-4395-95b4-71caa628f94e";
 
-                // Support both adity (user request) and aditya (user logs)
                 const isTestUser = email === "adityownseverything@gmail.com" || email === "adityaownseverything@gmail.com";
 
                 if (isTestUser) {
@@ -140,12 +141,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             console.log("[Auth] Setting user state with OrgID:", orgId);
             processedUserIdRef.current = id;
+
+            const isTestUser = email === "adityownseverything@gmail.com" || email === "adityaownseverything@gmail.com";
+
             setUser({
                 id: id,
                 email: email,
                 name: sbUser.user_metadata?.full_name || email.split('@')[0] || 'User',
-                organizationId: orgId
-            } as any);
+                organizationId: orgId,
+                role: (profile?.role as any) || (isTestUser ? 'owner' : 'viewer')
+            });
         } catch (err) {
             console.error("[Auth] Mapping crash:", err);
         }
@@ -180,8 +185,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push('/');
     };
 
+    const hasPermission = (action: string): boolean => {
+        if (!user) return false;
+        if (user.role === 'owner') return true;
+
+        switch (action) {
+            case 'view_traces':
+                return true; // All roles can view
+            case 'create_branch':
+                return user.role === 'dev'; // Owners (handled above) and devs
+            case 'invite_member':
+            case 'delete_trace':
+                return false; // Only owners (handled above)
+            default:
+                return false;
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+        <AuthContext.Provider value={{ user, loading, signIn, signOut, hasPermission }}>
             {children}
         </AuthContext.Provider>
     );

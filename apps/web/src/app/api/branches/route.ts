@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import path from "path";
 import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase";
 
 function getProjectRoot(): string {
     const cwd = process.cwd();
@@ -25,10 +26,10 @@ function runPythonHelper(scriptName: string, args: string[]): Promise<any> {
         let stdout = "";
         let stderr = "";
 
-        child.stdout.on("data", (d) => { stdout += d.toString(); });
-        child.stderr.on("data", (d) => { stderr += d.toString(); });
+        child.stdout.on("data", (d: any) => { stdout += d.toString(); });
+        child.stderr.on("data", (d: any) => { stderr += d.toString(); });
 
-        child.on("close", (code) => {
+        child.on("close", (code: number) => {
             if (stderr) console.error("[API] Python stderr:", stderr);
             try {
                 // Ignore noise like "Storage endpoint URL should have a trailing slash"
@@ -56,28 +57,75 @@ function runPythonHelper(scriptName: string, args: string[]): Promise<any> {
 
 /**
  * GET /api/branches?traceId=<id>
- * Lists all branches for a trace. Reads directly from Supabase (server-side, service role key).
+ * Lists all branches for a trace. Reads directly from Supabase.
+ * Strictly enforced organization boundary.
  */
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
         const traceId = searchParams.get("traceId");
 
+        // 1. Get Session for Org Isolation
+        // In a real app we'd use cookies() from next/headers, 
+        // for now we'll simulate the user from the auth header or session logic
+        // but since we are using supabaseAdmin for high-level operations,
+        // we must CHECK the trace's org against the user's profile.
+
+        // Let's assume the client passes an 'x-org-id' for now as a bridge to real session cookies
+        // OR we can fetch the profile of the current authenticated user.
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+        const supabase = supabaseAdmin;
+        const supabaseRest = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            { auth: { persistSession: false } }
+        );
+        const { data: { user }, error: authError } = await supabaseRest.auth.getUser(authHeader.replace('Bearer ', ''));
+
+        if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+        // Get user's profile/org
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('user_id', user.id)
+            .single();
+
+        if (!profile?.organization_id) return NextResponse.json({ error: "No organization found" }, { status: 403 });
+
+        const orgId = profile.organization_id;
+
+        // 2. If traceId provided, verify it belongs to this org
+        if (traceId) {
+            const { data: trace, error: traceError } = await supabase
+                .from('traces')
+                .select('org_id')
+                .eq('id', traceId)
+                .single();
+
+            if (traceError || !trace || trace.org_id !== orgId) {
+                // Stealth 404: Never reveal trace exists if not in your org
+                return NextResponse.json({ error: "Trace not found" }, { status: 404 });
+            }
+        }
+
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
         if (!supabaseUrl || !serviceKey) {
-            // Fallback: use Python handler
-            const args = ["list"];
-            if (traceId) args.push("--trace-id", traceId);
-            const result = await runPythonHelper("branch_handler.py", args);
-            return NextResponse.json({ branches: result.branches ?? [] });
+            throw new Error("Missing Supabase configuration");
         }
 
-        const supabase = createClient(supabaseUrl, serviceKey);
         let query = supabase.from("branches").select("*").order("created_at", { ascending: false });
         if (traceId) {
-            query = query.eq("trace_id", traceId);   // actual column name
+            query = query.eq("trace_id", traceId);
+        } else {
+            // If No traceId, only return branches that belong to traces in user's org
+            // (Requires a join or subquery in real RLS, but here we do it via trace_id filtering)
+            // For now, traceId is required for this route in the UI.
+            return NextResponse.json({ error: "traceId is required for security isolation" }, { status: 400 });
         }
 
         const { data, error } = await query;
@@ -111,6 +159,52 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         const { traceId, forkStep, name, overridePayload } = await req.json();
+
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+            console.warn("[API /branches POST] Missing Authorization header");
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+        const supabaseRest = createClient(supabaseUrl!, supabaseAnonKey, {
+            auth: { persistSession: false }
+        });
+
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: authError } = await supabaseRest.auth.getUser(token);
+
+        if (authError || !user) {
+            console.error("[API /branches POST] Auth verification failed:", authError?.message);
+            return NextResponse.json({ error: "Unauthorized", details: authError?.message }, { status: 401 });
+        }
+
+        const supabase = supabaseAdmin;
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('user_id', user.id)
+            .single();
+
+        if (profileError || !profile?.organization_id) {
+            console.error("[API /branches POST] Profile lookup failed:", profileError?.message);
+            return NextResponse.json({ error: "No organization access" }, { status: 403 });
+        }
+
+        console.log(`[API /branches POST] Auth success: ${user.email} (Org: ${profile.organization_id})`);
+
+        // 2. Verify traceId belongs to this org
+        const { data: trace } = await supabase
+            .from('traces')
+            .select('org_id')
+            .eq('id', traceId)
+            .single();
+
+        if (!trace || trace.org_id !== profile.organization_id) {
+            return NextResponse.json({ error: "Trace not found" }, { status: 404 });
+        }
 
         if (!traceId || forkStep === undefined) {
             return NextResponse.json({ error: "traceId and forkStep are required" }, { status: 400 });

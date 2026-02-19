@@ -45,11 +45,12 @@ export function useJobs() {
     const { user } = useAuth();
 
     const fetchJobs = React.useCallback(async () => {
-        if (!user) return;
+        if (!user?.organizationId) return;
 
         const { data, error } = await supabase
             .from('jobs')
             .select('*')
+            .eq('org_id', user.organizationId)
             .order('created_at', { ascending: false })
             .limit(10);
 
@@ -67,7 +68,12 @@ export function useJobs() {
         // Subscribe to changes
         const subscription = supabase
             .channel('jobs-changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => {
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'jobs',
+                filter: `org_id=eq.${user?.organizationId}`
+            }, () => {
                 fetchJobs();
             })
             .subscribe();
@@ -93,12 +99,17 @@ export function useStats() {
         if (!user) return;
 
         const fetchStats = async () => {
-            // This is a simplified stats fetch. In a real app, these would be RPCs or aggregated queries.
-            const { count: tracesCount } = await supabase.from('traces').select('*', { count: 'exact', head: true });
-            const { count: activeJobsCount } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'running');
-            const { count: successCount } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'completed');
-            const { count: totalJobs } = await supabase.from('jobs').select('*', { count: 'exact', head: true });
-            const { count: afeCount } = await supabase.from('afe_candidates').select('*', { count: 'exact', head: true });
+            if (!user?.organizationId) return;
+
+            // Strictly filter by org_id
+            const { count: tracesCount } = await supabase.from('traces').select('*', { count: 'exact', head: true }).eq('org_id', user.organizationId);
+            const { count: activeJobsCount } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('org_id', user.organizationId).eq('status', 'running');
+            const { count: successCount } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('org_id', user.organizationId).eq('status', 'completed');
+            const { count: totalJobs } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('org_id', user.organizationId);
+            const { count: afeCount } = await supabase
+                .from('afe_candidates')
+                .select('id, jobs!inner(org_id)', { count: 'exact', head: true })
+                .eq('jobs.org_id', user.organizationId);
 
             const successRate = totalJobs ? Math.round((successCount || 0) / totalJobs * 100) : 0;
 
@@ -129,16 +140,20 @@ export function useTrace(traceId: string) {
     const [trace, setTrace] = React.useState<Trace | null>(null);
     const [metadata, setMetadata] = React.useState<any>(null);
     const [loading, setLoading] = React.useState(true);
+    const { user } = useAuth();
 
     React.useEffect(() => {
         if (!traceId) return;
 
         const fetchTrace = async () => {
-            // 1. Fetch Trace Record
+            if (!user?.organizationId) return;
+
+            // 1. Fetch Trace Record (Filtered by org_id for security)
             const { data: traceData, error: traceError } = await supabase
                 .from('traces')
                 .select('*')
                 .eq('id', traceId)
+                .eq('org_id', user.organizationId)
                 .single();
 
             if (traceError) {
@@ -166,7 +181,7 @@ export function useTrace(traceId: string) {
         };
 
         fetchTrace();
-    }, [traceId]);
+    }, [traceId, user]);
 
     return { trace, metadata, loading };
 }
@@ -264,8 +279,8 @@ export function useTraceEvents(traceId: string | null | undefined) {
                 const text = await data.text();
                 return text
                     .split('\n')
-                    .filter(line => line.trim())
-                    .map(line => {
+                    .filter((line: string) => line.trim())
+                    .map((line: string) => {
                         try {
                             return JSON.parse(line);
                         } catch (e) {
@@ -300,12 +315,16 @@ export function useTraceEvents(traceId: string | null | undefined) {
 export function useSchedules() {
     const [schedules, setSchedules] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const { user } = useAuth();
 
     React.useEffect(() => {
+        if (!user?.organizationId) return;
+
         const fetchSchedules = async () => {
             const { data, error } = await supabase
                 .from('schedules')
                 .select('*')
+                .eq('org_id', user.organizationId)
                 .order('next_run_at', { ascending: true });
 
             if (!error) setSchedules(data || []);
@@ -313,7 +332,7 @@ export function useSchedules() {
         };
 
         fetchSchedules();
-    }, []);
+    }, [user]);
 
     return { schedules, loading };
 }

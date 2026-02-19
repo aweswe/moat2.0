@@ -14,23 +14,13 @@ export async function POST(req: Request) {
         // Ensure we have an org_id
         let { org_id } = metadata;
         if (!org_id) {
-            const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
-            if (orgs && orgs.length > 0) {
-                org_id = orgs[0].id;
-            } else {
-                // Create default org
-                const { data: newOrg, error: orgError } = await supabase.from('organizations').insert({
-                    name: 'Default Organization',
-                    slug: 'default-org',
-                }).select().single();
+            return NextResponse.json({ error: 'Missing org_id in metadata' }, { status: 400 });
+        }
 
-                if (newOrg) org_id = newOrg.id;
-                else {
-                    console.error('[API] Failed to create default org:', orgError);
-                    // Fallback to a zero UUID if absolutely desperate, but likely will fail FK
-                    org_id = '00000000-0000-0000-0000-000000000000';
-                }
-            }
+        // Verify Org exists
+        const { data: org } = await supabase.from('organizations').select('id').eq('id', org_id).single();
+        if (!org) {
+            return NextResponse.json({ error: 'Invalid or non-existent org_id' }, { status: 400 });
         }
 
         // metadata is a JSON object from the python SDK

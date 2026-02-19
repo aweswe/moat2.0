@@ -22,8 +22,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export default function TeamPage() {
-    const { user } = useAuth();
+    const { user, hasPermission } = useAuth();
     const { members, loading } = useMembers(user?.organizationId);
+
+    const canInvite = hasPermission('invite_member');
 
     return (
         <div className="space-y-8">
@@ -32,7 +34,12 @@ export default function TeamPage() {
                     <h1 className="text-3xl font-bold tracking-tight">Collaboration Space</h1>
                     <p className="text-muted-foreground mt-1 text-sm font-mono uppercase tracking-widest opacity-60">Control // Registry_v1.2</p>
                 </div>
-                <Button size="sm" className="font-mono text-[10px] uppercase">
+                <Button
+                    size="sm"
+                    className="font-mono text-[10px] uppercase"
+                    disabled={!canInvite}
+                    title={!canInvite ? "Only organization owners can invite members" : ""}
+                >
                     <UserPlus className="w-3 h-3 mr-2" /> Invite_Operator
                 </Button>
             </div>
@@ -84,9 +91,11 @@ export default function TeamPage() {
                                                 <CheckCircle2 className="w-3 h-3 text-green-500" /> Active
                                             </div>
                                         </div>
-                                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-white">
-                                            <MoreVertical className="w-4 h-4" />
-                                        </Button>
+                                        {hasPermission('invite_member') && (
+                                            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-white">
+                                                <MoreVertical className="w-4 h-4" />
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
                             ))}

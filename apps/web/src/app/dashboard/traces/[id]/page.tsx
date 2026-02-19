@@ -13,12 +13,14 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
     Card,
     CardContent,
     CardHeader,
     CardTitle
 } from "@/components/ui/card";
+import { useAuth } from "@/hooks/use-auth";
 import {
     Terminal,
     History,
@@ -34,7 +36,8 @@ import {
     Copy,
     Check,
     TerminalSquare,
-    ShieldCheck
+    ShieldCheck,
+    GitFork
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -54,8 +57,11 @@ interface TraceEvent {
 
 function TraceDetailInner() {
     const params = useParams();
+    const { user, hasPermission } = useAuth();
     const traceId = params.id as string;
     const { trace, metadata, loading: traceLoading } = useTrace(traceId);
+
+    const canBranch = hasPermission('create_branch');
     const { events, loading: eventsLoading, fetchEvents } = useTraceEvents(traceId);
     const [parentEvents, setParentEvents] = React.useState<any[]>([]);
     const [selectedEvent, setSelectedEvent] = React.useState<TraceEvent | null>(null);
@@ -66,7 +72,18 @@ function TraceDetailInner() {
     const [activeDiffBranch, setActiveDiffBranch] = React.useState<any>(null);
     const [showScript, setShowScript] = React.useState(false);
     const [cliCopied, setCliCopied] = React.useState(false);
-    const { branches, activeBranchId, refreshBranches } = useBranching();
+    const { branches, activeBranchId, refreshBranches, createBranch, isLoading } = useBranching();
+
+    // Forking state
+    const [isForkDialogOpen, setIsForkDialogOpen] = React.useState(false);
+    const [forkTargetEvent, setForkTargetEvent] = React.useState<TraceEvent | null>(null);
+    const [overrideJson, setOverrideJson] = React.useState("");
+
+    React.useEffect(() => {
+        if (forkTargetEvent) {
+            setOverrideJson(JSON.stringify(forkTargetEvent.payload, null, 2));
+        }
+    }, [forkTargetEvent]);
 
     // Realtime: auto-refresh when CLI replay pushes new branch events
     useRealtime({
@@ -218,15 +235,40 @@ function TraceDetailInner() {
                     </Button>
                     <Button
                         size="sm"
+                        className="font-mono text-[10px] bg-brand hover:bg-brand/90"
+                        disabled={isLoading || !canBranch || !selectedEvent}
+                        onClick={() => {
+                            if (!selectedEvent) return;
+                            setForkTargetEvent(selectedEvent);
+                            setIsForkDialogOpen(true);
+                        }}
+                        title={!canBranch ? "Only Owners and Devs can create branches" : `Create a new branch from Step ${selectedEvent?.seq ?? 0}`}
+                    >
+                        <GitFork className="w-3 h-3 mr-2" />
+                        {isLoading ? "FORKING..." : `FORK_AT_STEP_${selectedEvent?.seq ?? 0}`}
+                    </Button>
+                    <Button
+                        size="sm"
                         className="font-mono text-[10px]"
                         disabled={isReplaying}
                         onClick={async () => {
                             try {
                                 setIsReplaying(true);
                                 setReplayState(null);
+
+                                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                                if (sessionError || !session?.access_token) {
+                                    console.error("Replay failed: No active session", sessionError);
+                                    alert("Authentication failed. Please sign in again.");
+                                    return;
+                                }
+
                                 const res = await fetch('/api/replay', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${session.access_token}`
+                                    },
                                     body: JSON.stringify({ traceId, step: currentStep })
                                 });
                                 const data = await res.json();
@@ -322,6 +364,10 @@ function TraceDetailInner() {
                                             expectedEvent={parentEventMap.get(event.seq)}
                                             isSelected={selectedEvent === event}
                                             onSelect={() => setSelectedEvent(event)}
+                                            onFork={(e) => {
+                                                setForkTargetEvent(e);
+                                                setIsForkDialogOpen(true);
+                                            }}
                                             traceId={traceId}
                                             scriptContent={metadata?.script_content}
                                         />
@@ -476,6 +522,57 @@ function TraceDetailInner() {
                     ✕ close diff
                 </button>
             )}
+            {/* Central Fork Dialog */}
+            <Dialog open={isForkDialogOpen} onOpenChange={setIsForkDialogOpen}>
+                <DialogContent className="sm:max-w-[1000px] h-[80vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Fork Trace at Step {forkTargetEvent?.seq}</DialogTitle>
+                        <DialogDescription>
+                            Create a new branch from this point. You can override the event data below.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-1 grid grid-cols-2 gap-4 py-4 min-h-0">
+                        <div className="flex flex-col gap-2 h-full">
+                            <label className="text-xs font-bold uppercase text-muted-foreground">Source Script Context</label>
+                            <div className="bg-muted/30 rounded-md border border-border p-2 flex-1 overflow-auto font-mono text-[10px] relative">
+                                {metadata?.script_content ? (
+                                    <pre className="whitespace-pre-wrap">{metadata.script_content}</pre>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full opacity-40 italic">
+                                        Source code not available for this trace.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2 h-full">
+                            <label className="text-xs font-bold uppercase text-muted-foreground">Event Payload Override</label>
+                            <Textarea
+                                value={overrideJson}
+                                onChange={(e) => setOverrideJson(e.target.value)}
+                                className="font-mono text-xs flex-1 resize-none"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsForkDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            onClick={async () => {
+                                if (!forkTargetEvent) return;
+                                try {
+                                    const payload = JSON.parse(overrideJson);
+                                    await createBranch(traceId, forkTargetEvent.seq, `Fork at Step ${forkTargetEvent.seq}`, payload);
+                                    setIsForkDialogOpen(false);
+                                } catch (e) {
+                                    alert("Invalid JSON format in payload override");
+                                }
+                            }}
+                            disabled={isLoading}
+                        >
+                            {isLoading ? "Forking..." : "Fork & Run"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

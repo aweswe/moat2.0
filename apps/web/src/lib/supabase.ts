@@ -7,15 +7,24 @@ if (!supabaseUrl || !supabaseAnonKey) {
     console.warn("Supabase URL or Anon Key is missing. Check your .env file.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Ensure singleton client on the frontend
+export const supabase = (typeof window !== "undefined")
+    ? (window as any)._supabaseInstance || ((window as any)._supabaseInstance = createClient(supabaseUrl, supabaseAnonKey))
+    : createClient(supabaseUrl, supabaseAnonKey);
 
 // Admin client for backend tasks
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 if (typeof window === "undefined") {
     if (!supabaseServiceRoleKey) {
         console.warn("[supabase] SUPABASE_SERVICE_ROLE_KEY is missing! Admin tasks will fail RLS.");
-    } else {
-        console.log(`[supabase] SUPABASE_SERVICE_ROLE_KEY is present (Length: ${supabaseServiceRoleKey.length}).`);
     }
 }
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey || supabaseAnonKey);
+
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey || supabaseAnonKey, {
+    auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+    }
+});
+

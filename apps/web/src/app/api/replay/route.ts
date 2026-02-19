@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import path from "path";
+import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase";
 
 /**
  * Run a Python helper script via spawn (cross-platform, no cmd /c needed).
@@ -19,10 +21,10 @@ function runPythonHelper(scriptName: string, args: string[]): Promise<any> {
         let stdout = "";
         let stderr = "";
 
-        child.stdout.on("data", (d) => { stdout += d.toString(); });
-        child.stderr.on("data", (d) => { stderr += d.toString(); });
+        child.stdout.on("data", (d: any) => { stdout += d.toString(); });
+        child.stderr.on("data", (d: any) => { stderr += d.toString(); });
 
-        child.on("close", (code) => {
+        child.on("close", (code: number) => {
             if (stderr) console.error("[API] Python stderr:", stderr);
             try {
                 // Ignore noise like "Storage endpoint URL should have a trailing slash"
@@ -69,6 +71,53 @@ export async function POST(req: Request) {
 
         if (!traceId) {
             return NextResponse.json({ error: "traceId is required" }, { status: 400 });
+        }
+
+        // 1. Session Auth + Org Isolation
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+            console.warn("[API /replay] Missing Authorization header");
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, ""); // Trim trailing slash
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+        const supabaseRest = createClient(supabaseUrl!, supabaseAnonKey, {
+            auth: { persistSession: false }
+        });
+
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: authError } = await supabaseRest.auth.getUser(token);
+
+        if (authError || !user) {
+            console.error("[API /replay] Auth verification failed:", authError?.message || "User not found");
+            return NextResponse.json({ error: "Unauthorized", details: authError?.message }, { status: 401 });
+        }
+
+        const supabase = supabaseAdmin;
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('user_id', user.id)
+            .single();
+
+        if (profileError || !profile?.organization_id) {
+            console.error("[API /replay] Profile lookup failed for user:", user.id, profileError?.message);
+            return NextResponse.json({ error: "No organization access" }, { status: 403 });
+        }
+
+        console.log(`[API /replay] Auth success: ${user.email} (Org: ${profile.organization_id})`);
+
+        // 2. Verify traceId belongs to this org (Stealth 404)
+        const { data: trace } = await supabase
+            .from('traces')
+            .select('org_id')
+            .eq('id', traceId)
+            .single();
+
+        if (!trace || trace.org_id !== profile.organization_id) {
+            return NextResponse.json({ error: "Trace not found" }, { status: 404 });
         }
 
         const args: string[] = ["--trace-id", traceId];
