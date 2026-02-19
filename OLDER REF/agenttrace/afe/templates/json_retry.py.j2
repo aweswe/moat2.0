@@ -1,0 +1,20 @@
+# Auto-generated fix: Retry with JSON mode enabled
+# Reason: Malformed JSON response / JSON decode error
+
+# === AFE_PATCH:JSON_RETRY ===
+def safe_json_call(model, messages):
+    """
+    Ensures JSON-mode retry on malformed responses.
+    """
+    try:
+        return model.chat(messages)
+    except Exception as e:
+        if "json" in str(e).lower() or "decode" in str(e).lower():
+            # Retry with JSON-mode enabled
+            messages.insert(0, {
+                "role": "system",
+                "content": "Respond ONLY with strict JSON format."
+            })
+            return model.chat(messages)
+        raise
+# === END AFE_PATCH:JSON_RETRY ===

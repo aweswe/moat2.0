@@ -12,9 +12,9 @@ export async function POST(req: NextRequest) {
 
         console.log(`[SDK] Initial script upload for trace ${trace_id}`);
 
-        // Upload script content to storage as metadata.json (SDK's convention)
         if (script_content) {
-            const { error: uploadError } = await supabaseAdmin.storage
+            // 1. Upload as metadata.json (SDK convention)
+            const { error: metaError } = await supabaseAdmin.storage
                 .from("traces")
                 .upload(`${trace_id}/metadata.json`, JSON.stringify({
                     script_content,
@@ -24,9 +24,20 @@ export async function POST(req: NextRequest) {
                     upsert: true
                 });
 
-            if (uploadError) {
-                console.error("[SDK] Initial script upload error:", uploadError);
-                return NextResponse.json({ error: "Storage upload failed" }, { status: 500 });
+            if (metaError) {
+                console.error("[SDK] Metadata upload error:", metaError);
+            }
+
+            // 2. Upload as standalone script.py (for code viewer)
+            const { error: scriptError } = await supabaseAdmin.storage
+                .from("traces")
+                .upload(`${trace_id}/script.py`, script_content, {
+                    contentType: 'text/x-python',
+                    upsert: true
+                });
+
+            if (scriptError) {
+                console.error("[SDK] Script upload error:", scriptError);
             }
         }
 

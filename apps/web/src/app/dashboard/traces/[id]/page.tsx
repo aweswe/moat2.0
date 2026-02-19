@@ -29,7 +29,11 @@ import {
     ArrowLeft,
     Box,
     FileText,
-    Cpu
+    Cpu,
+    FileCode2,
+    Copy,
+    Check,
+    TerminalSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -37,6 +41,8 @@ import { BranchPicker } from "@/components/trace/BranchPicker";
 import { TraceEventRow } from "@/components/trace/TraceEventRow";
 import { MultiverseView } from "@/components/trace/MultiverseView";
 import { BranchingProvider, useBranching } from "@/components/trace/BranchingProvider";
+import ScriptViewer from "@/components/trace/ScriptViewer";
+import { useRealtime } from "@/hooks/use-realtime";
 
 interface TraceEvent {
     timestamp: string;
@@ -57,7 +63,29 @@ function TraceDetailInner() {
     const [replayState, setReplayState] = React.useState<any>(null);
     const [showReplayPanel, setShowReplayPanel] = React.useState(false);
     const [activeDiffBranch, setActiveDiffBranch] = React.useState<any>(null);
-    const { branches, activeBranchId } = useBranching();
+    const [showScript, setShowScript] = React.useState(false);
+    const [cliCopied, setCliCopied] = React.useState(false);
+    const { branches, activeBranchId, refreshBranches } = useBranching();
+
+    // Realtime: auto-refresh when CLI replay pushes new branch events
+    useRealtime({
+        traceId,
+        onBranchUpdate: React.useCallback(() => {
+            refreshBranches(traceId);
+        }, [refreshBranches, traceId]),
+    });
+
+    const currentStep = events.length > 0
+        ? Math.floor((sliderValue / 100) * (events.length - 1))
+        : 0;
+
+    const cliCommand = `agenttrace replay --session ${traceId} --step ${currentStep}${activeBranchId ? ` --branch ${activeBranchId}` : ''}`;
+
+    const copyCliCommand = async () => {
+        await navigator.clipboard.writeText(cliCommand);
+        setCliCopied(true);
+        setTimeout(() => setCliCopied(false), 2000);
+    };
 
     React.useEffect(() => {
         if (trace?.parent_trace_id) {
@@ -164,6 +192,24 @@ function TraceDetailInner() {
                         </DialogContent>
                     </Dialog>
                     <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-mono text-[10px] border-brand/20 text-brand hover:bg-brand/5"
+                        onClick={() => setShowScript(!showScript)}
+                    >
+                        <FileCode2 className="w-3 h-3 mr-2" />
+                        {showScript ? "HIDE_SOURCE" : "SOURCE_CODE"}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-mono text-[10px] border-green-500/20 text-green-500 hover:bg-green-500/5"
+                        onClick={copyCliCommand}
+                    >
+                        {cliCopied ? <Check className="w-3 h-3 mr-2" /> : <TerminalSquare className="w-3 h-3 mr-2" />}
+                        {cliCopied ? "COPIED!" : "RE-RUN_LOCAL"}
+                    </Button>
+                    <Button
                         size="sm"
                         className="font-mono text-[10px]"
                         disabled={isReplaying}
@@ -171,10 +217,6 @@ function TraceDetailInner() {
                             try {
                                 setIsReplaying(true);
                                 setReplayState(null);
-                                // Pure event replay — no script re-execution
-                                const currentStep = events.length > 0
-                                    ? Math.floor((sliderValue / 100) * (events.length - 1))
-                                    : undefined;
                                 const res = await fetch('/api/replay', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
@@ -197,7 +239,7 @@ function TraceDetailInner() {
                         ) : (
                             <Zap className="w-3 h-3 mr-2" />
                         )}
-                        {isReplaying ? "LOADING..." : "RE-REPLAY"}
+                        {isReplaying ? "LOADING..." : "QUICK_PREVIEW"}
                     </Button>
                 </div>
             </div>
@@ -232,6 +274,23 @@ function TraceDetailInner() {
                     </div>
                 </div>
             </Card>
+
+            {/* CLI Command Bar */}
+            <div className="flex items-center gap-3 px-4 py-3 bg-black/30 border border-white/5 rounded-lg font-mono text-[11px]">
+                <TerminalSquare className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                <code className="flex-1 text-foreground/80 truncate select-all">{cliCommand}</code>
+                <button onClick={copyCliCommand} className="text-muted-foreground hover:text-brand transition-colors shrink-0">
+                    {cliCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+            </div>
+
+            {/* Source Code Viewer */}
+            {showScript && (
+                <ScriptViewer
+                    traceId={traceId}
+                    highlightLine={selectedEvent?.payload?.line}
+                />
+            )}
 
             <div className="grid gap-6 md:grid-cols-12">
                 {/* Timeline Bar */}

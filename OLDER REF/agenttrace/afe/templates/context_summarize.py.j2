@@ -1,0 +1,29 @@
+# Auto-generated fix: Summarize context before model call
+# Reason: Context window exceeded (Limit: {{ limit }})
+
+# === AFE_INSERT_BEFORE_MODEL_CALL ===
+def summarize_context(messages, max_tokens={{ limit }}):
+    """
+    Summarizes previous messages to fit within the LLM context window.
+    Fallback token estimator included.
+    """
+    def estimate_tokens(text: str) -> int:
+        # Approx 4 chars per token heuristic
+        return max(1, len(text) // 4)
+
+    total_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)
+    if total_tokens <= max_tokens:
+        return messages
+
+    system_messages = [m for m in messages if m.get("role") == "system"]
+    non_system_messages = [m for m in messages if m.get("role") != "system"]
+
+    recent_history = non_system_messages[-5:]
+
+    summary_message = {
+        "role": "system",
+        "content": "Summary of previous context: [Summarized content placeholder]"
+    }
+
+    return system_messages + [summary_message] + recent_history
+# === END AFE_INSERT_BEFORE_MODEL_CALL ===

@@ -59,9 +59,9 @@ def upload_trace(trace_id: str, project_id: Optional[str] = None) -> Dict[str, A
     if not trace_path.exists():
         return {"error": f"Trace not found: {trace_path}"}
 
-    print(f"[START] Uploading trace {trace_id}...")
+    print(f"🚀 Uploading trace {trace_id}...")
     if project_id:
-        print(f"   Project: {project_id}")
+        print(f"  📂 Project: {project_id}")
 
     try:
         # 1. Upload to Storage
@@ -71,7 +71,7 @@ def upload_trace(trace_id: str, project_id: Optional[str] = None) -> Dict[str, A
                 f,
                 file_options={"content-type": "application/json", "upsert": "true"}
             )
-        print("  [OK] Events uploaded")
+        print("  ✅ Events uploaded")
 
         # 2. Upload Keyframes (if exist)
         keyframes_path = Path(f".agenttrace/traces/{trace_id}_keyframes.json")
@@ -82,7 +82,7 @@ def upload_trace(trace_id: str, project_id: Optional[str] = None) -> Dict[str, A
                     f,
                     file_options={"content-type": "application/json", "upsert": "true"}
                 )
-            print("  [OK] Keyframes uploaded")
+            print("  ✅ Keyframes uploaded")
             
             # Upload individual snapshots
             try:
@@ -105,9 +105,9 @@ def upload_trace(trace_id: str, project_id: Optional[str] = None) -> Dict[str, A
                             )
                          count += 1
                 if count > 0:
-                    print(f"  [OK] {count} snapshots uploaded")
+                    print(f"  ✅ {count} snapshots uploaded")
             except Exception as e:
-                print(f"  [WARN]  Snapshot upload warning: {e}")
+                print(f"  ⚠️  Snapshot upload warning: {e}")
 
         # 2b. Upload Script (Critical for Replay)
         metadata_path = Path(f".agenttrace/traces/{trace_id}/metadata.json")
@@ -125,7 +125,7 @@ def upload_trace(trace_id: str, project_id: Optional[str] = None) -> Dict[str, A
                         file_options={"content-type": "text/x-python", "upsert": "true"}
                     )
                     script_uploaded = True
-                    print("  [OK] Script uploaded (from metadata)")
+                    print("  ✅ Script uploaded (from metadata)")
                 elif script_path_str and Path(script_path_str).exists():
                      with open(script_path_str, "rb") as f:
                         client.storage.from_("traces").upload(
@@ -134,12 +134,12 @@ def upload_trace(trace_id: str, project_id: Optional[str] = None) -> Dict[str, A
                             file_options={"content-type": "text/x-python", "upsert": "true"}
                         )
                      script_uploaded = True
-                     print(f"  [OK] Script uploaded (from {Path(script_path_str).name})")
+                     print(f"  ✅ Script uploaded (from {Path(script_path_str).name})")
             except Exception as e:
-                print(f"  [WARN]  Script upload warning: {e}")
+                print(f"  ⚠️  Script upload warning: {e}")
         
         if not script_uploaded:
-             print("  [WARN]  Warning: No script found to upload. Replay may fail.")
+             print("  ⚠️  Warning: No script found to upload. Replay may fail.")
 
         # 3. Create Trace Record in DB
         # We need to get the org_id first. 
@@ -171,52 +171,17 @@ def upload_trace(trace_id: str, project_id: Optional[str] = None) -> Dict[str, A
 
         # Uses Upsert
         client.table("traces").upsert(trace_record).execute()
-        print("  [OK] Trace record created")
+        print("  ✅ Trace record created")
 
         # FIX 3.1: Clean up local trace after successful upload
         import shutil
         local_trace_dir = Path(f".agenttrace/traces/{trace_id}")
         if local_trace_dir.exists():
             shutil.rmtree(local_trace_dir)
-            print("   Local trace cleaned up")
+            print("  🧹 Local trace cleaned up")
 
         return {"success": True, "trace_id": trace_id}
 
     except Exception as e:
         return {"error": f"Upload failed: {e}"}
 
-
-def stream_branch_events(trace_id: str, branch_id: str, events: list, token: str = None) -> Dict[str, Any]:
-    """
-    Stream replay branch events back to Supabase.
-    Called by CLI replay when running locally — uploads the new branch's
-    events.jsonl to Storage and updates the branch row status.
-    """
-    if not create_client:
-        return {"error": "supabase-py not installed"}
-
-    if not token:
-        token = auth.get_token()
-    if not token:
-        return {"error": "Not logged in. Run: agenttrace login"}
-
-    client = get_supabase_client(token)
-
-    try:
-        # 1. Upload events as JSONL to branch-specific path
-        events_jsonl = "\n".join(json.dumps(e) for e in events)
-        client.storage.from_("traces").upload(
-            f"{branch_id}/events.jsonl",
-            events_jsonl.encode("utf-8"),
-            file_options={"content-type": "application/x-jsonlines", "upsert": "true"}
-        )
-
-        # 2. Update branch row with completed status
-        client.table("branches").update({
-            "status": "completed",
-            "event_count": len(events),
-        }).eq("id", branch_id).execute()
-
-        return {"success": True, "event_count": len(events)}
-    except Exception as e:
-        return {"error": f"Stream failed: {e}"}
