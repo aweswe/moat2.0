@@ -26,6 +26,11 @@ coverage.xml
 *.log
 .agenttrace/traces/*
 !.agenttrace/traces/.gitkeep
+.agenttrace/checkpoints/
+.agenttrace/snapshots/
+.agenttrace/branches/
+.agenttrace_chaos/
+.agenttrace_test/
 
 # Env
 .env

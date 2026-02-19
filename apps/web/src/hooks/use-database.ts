@@ -25,6 +25,7 @@ export interface Trace {
     status: string;
     created_at: string;
     org_id: string;
+    parent_trace_id?: string;
 }
 
 export interface AFECandidate {
@@ -250,23 +251,18 @@ export function useTraceEvents(traceId: string | null | undefined) {
     const [events, setEvents] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
 
-    const fetchEvents = React.useCallback(async () => {
-        if (!traceId) return;
-        setLoading(true);
-
+    const fetchEvents = React.useCallback(async (id: string) => {
         try {
-            // Download events.jsonl from Supabase Storage
             const { data, error } = await supabase.storage
                 .from('traces')
-                .download(`${traceId}/events.jsonl`);
+                .download(`${id}/events.jsonl`);
 
             if (error) {
-                console.warn("Failed to fetch events.jsonl:", error);
-                setEvents([]);
+                console.warn(`Failed to fetch events.jsonl for ${id}:`, error);
+                return [];
             } else if (data) {
                 const text = await data.text();
-                // Parse NDJSON
-                const parsedEvents = text
+                return text
                     .split('\n')
                     .filter(line => line.trim())
                     .map(line => {
@@ -277,23 +273,28 @@ export function useTraceEvents(traceId: string | null | undefined) {
                         }
                     })
                     .filter(Boolean);
-
-                setEvents(parsedEvents);
             }
+            return [];
         } catch (e) {
-            console.error("Error loading trace events:", e);
-            setEvents([]);
-        } finally {
-            setLoading(false);
+            console.error(`Error loading trace events for ${id}:`, e);
+            return [];
         }
-    }, [traceId]);
+    }, []);
 
     React.useEffect(() => {
-        fetchEvents();
-        // No real-time subscription for storage files yet (Storage events are basic)
+        if (!traceId) return;
+
+        const load = async () => {
+            setLoading(true);
+            const data = await fetchEvents(traceId);
+            setEvents(data);
+            setLoading(false);
+        };
+
+        load();
     }, [traceId, fetchEvents]);
 
-    return { events, loading };
+    return { events, loading, fetchEvents };
 }
 
 export function useSchedules() {

@@ -35,6 +35,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BranchPicker } from "@/components/trace/BranchPicker";
 import { TraceEventRow } from "@/components/trace/TraceEventRow";
+import { MultiverseView } from "@/components/trace/MultiverseView";
+import { BranchingProvider, useBranching } from "@/components/trace/BranchingProvider";
 
 interface TraceEvent {
     timestamp: string;
@@ -43,14 +45,31 @@ interface TraceEvent {
     seq: number;
 }
 
-export default function TraceDetailPage() {
+function TraceDetailInner() {
     const params = useParams();
     const traceId = params.id as string;
     const { trace, metadata, loading: traceLoading } = useTrace(traceId);
-    const { events, loading: eventsLoading } = useTraceEvents(traceId);
+    const { events, loading: eventsLoading, fetchEvents } = useTraceEvents(traceId);
+    const [parentEvents, setParentEvents] = React.useState<any[]>([]);
     const [selectedEvent, setSelectedEvent] = React.useState<TraceEvent | null>(null);
     const [sliderValue, setSliderValue] = React.useState(0);
     const [isReplaying, setIsReplaying] = React.useState(false);
+    const [replayState, setReplayState] = React.useState<any>(null);
+    const [showReplayPanel, setShowReplayPanel] = React.useState(false);
+    const [activeDiffBranch, setActiveDiffBranch] = React.useState<any>(null);
+    const { branches, activeBranchId } = useBranching();
+
+    React.useEffect(() => {
+        if (trace?.parent_trace_id) {
+            fetchEvents(trace.parent_trace_id).then(setParentEvents);
+        }
+    }, [trace?.parent_trace_id, fetchEvents]);
+
+    const parentEventMap = React.useMemo(() => {
+        const map = new Map<number, any>();
+        parentEvents.forEach(e => map.set(e.seq, e));
+        return map;
+    }, [parentEvents]);
 
     React.useEffect(() => {
         if (events.length > 0 && !selectedEvent) {
@@ -151,32 +170,23 @@ export default function TraceDetailPage() {
                         onClick={async () => {
                             try {
                                 setIsReplaying(true);
+                                setReplayState(null);
+                                // Pure event replay — no script re-execution
+                                const currentStep = events.length > 0
+                                    ? Math.floor((sliderValue / 100) * (events.length - 1))
+                                    : undefined;
                                 const res = await fetch('/api/replay', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ traceId })
+                                    body: JSON.stringify({ traceId, step: currentStep })
                                 });
-
                                 const data = await res.json();
-
-                                if (!res.ok) {
-                                    throw new Error(data.details || data.error || "Unknown server error");
-                                }
-
-                                if (data.success && data.newTraceId) {
-                                    // Redirect to new trace
-                                    window.location.href = `/dashboard/traces/${data.newTraceId}`;
-                                } else {
-                                    alert("Replay started, but no new trace ID returned.\nCheck console for details.");
-                                    console.log("Replay output:", data.output);
-                                }
+                                if (!res.ok) throw new Error(data.details || data.error || "Unknown server error");
+                                setReplayState(data);
+                                setShowReplayPanel(true);
                             } catch (e: any) {
                                 console.error("Replay failed", e);
-                                let errorMsg = e.message;
-                                if (e.details) errorMsg += `\n\nDetails: ${e.details}`;
-                                if (e.stderr) errorMsg += `\n\nStderr: ${e.stderr.slice(0, 500)}`;
-
-                                alert(`Failed to trigger replay: ${errorMsg}`);
+                                alert(`Replay failed: ${e.message}`);
                             } finally {
                                 setIsReplaying(false);
                             }
@@ -187,7 +197,7 @@ export default function TraceDetailPage() {
                         ) : (
                             <Zap className="w-3 h-3 mr-2" />
                         )}
-                        {isReplaying ? "RUNNING..." : "RE-REPLAY"}
+                        {isReplaying ? "LOADING..." : "RE-REPLAY"}
                     </Button>
                 </div>
             </div>
@@ -243,6 +253,7 @@ export default function TraceDetailPage() {
                                         <TraceEventRow
                                             key={i}
                                             event={event}
+                                            expectedEvent={parentEventMap.get(event.seq)}
                                             isSelected={selectedEvent === event}
                                             onSelect={() => setSelectedEvent(event)}
                                             traceId={traceId}
@@ -270,11 +281,42 @@ export default function TraceDetailPage() {
                                         <div>SEQ_NO: {selectedEvent.seq || 0}</div>
                                         <div>TYPE: {selectedEvent.type}</div>
                                     </div>
-                                    <div className="bg-black/40 p-3 rounded-lg border border-white/5">
-                                        <pre className="text-[10px] font-mono text-brand overflow-auto max-h-[400px]">
-                                            {JSON.stringify(selectedEvent.payload, null, 2)}
-                                        </pre>
-                                    </div>
+
+                                    {parentEventMap.has(selectedEvent.seq) && JSON.stringify(selectedEvent.payload) !== JSON.stringify(parentEventMap.get(selectedEvent.seq).payload) ? (
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <div className="text-[9px] font-bold uppercase text-red-400 flex items-center gap-1">
+                                                        <AlertCircle className="w-3 h-3" /> Historical_Record
+                                                    </div>
+                                                    <div className="bg-red-500/5 p-3 rounded-lg border border-red-500/20">
+                                                        <pre className="text-[10px] font-mono text-red-300 overflow-auto max-h-[300px]">
+                                                            {JSON.stringify(parentEventMap.get(selectedEvent.seq).payload, null, 2)}
+                                                        </pre>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <div className="text-[9px] font-bold uppercase text-brand flex items-center gap-1">
+                                                        <CheckCircle2 className="w-3 h-3" /> Current_Execution
+                                                    </div>
+                                                    <div className="bg-brand/5 p-3 rounded-lg border border-brand/20">
+                                                        <pre className="text-[10px] font-mono text-brand overflow-auto max-h-[300px]">
+                                                            {JSON.stringify(selectedEvent.payload, null, 2)}
+                                                        </pre>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-[10px] font-mono text-red-400">
+                                                DIVERGENCE_DETECTED: This step differs from the parent trace. The agent took a different path.
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-black/40 p-3 rounded-lg border border-white/5">
+                                            <pre className="text-[10px] font-mono text-brand overflow-auto max-h-[400px]">
+                                                {JSON.stringify(selectedEvent.payload, null, 2)}
+                                            </pre>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="py-12 text-center opacity-30 text-[10px] font-mono italic uppercase">
@@ -293,20 +335,89 @@ export default function TraceDetailPage() {
                         <CardContent className="p-4 text-[10px] font-mono space-y-2 opacity-80">
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground uppercase">Runtime</span>
-                                <span>Python_3.12</span>
+                                <span>{metadata?.runtime ?? "Python_3.x"}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground uppercase">Worker_Node</span>
-                                <span className="text-brand">Node-Delta-04</span>
+                                <span className="text-muted-foreground uppercase">Event_Count</span>
+                                <span className="text-brand">{events.length}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground uppercase">Memory_Usage</span>
-                                <span>124MB</span>
+                                <span className="text-muted-foreground uppercase">Status</span>
+                                <span className={trace?.status === 'completed' ? 'text-green-400' : 'text-yellow-400'}>{trace?.status?.toUpperCase() ?? "UNKNOWN"}</span>
                             </div>
+                            {metadata?.script_path && (
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground uppercase">Script</span>
+                                    <span className="text-xs opacity-60 truncate max-w-[120px]" title={metadata.script_path}>{metadata.script_path.split(/[\/\\]/).pop()}</span>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
             </div>
+
+            {/* Replay State Panel */}
+            {showReplayPanel && replayState && (
+                <div className="mt-6 rounded-lg border border-brand/20 bg-brand/5 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="font-mono text-xs font-bold uppercase text-brand flex items-center gap-2">
+                            <Zap className="w-3 h-3" /> Replayed_State @ Step {replayState.step ?? "all"}
+                        </span>
+                        <button onClick={() => setShowReplayPanel(false)} className="text-xs opacity-40 hover:opacity-80">✕ close</button>
+                    </div>
+                    <div className="font-mono text-[10px] grid grid-cols-3 gap-3 mb-3 text-muted-foreground">
+                        <span>Events: <span className="text-foreground">{replayState.eventCount}</span></span>
+                        <span>Max Step: <span className="text-foreground">{replayState.maxStep}</span></span>
+                        <span>Hash: <span className="text-foreground opacity-60">{replayState.parentHash?.slice(0, 12)}…</span></span>
+                    </div>
+                    <pre className="text-[10px] font-mono bg-black/40 border border-white/5 rounded p-3 max-h-[300px] overflow-auto text-brand/80">
+                        {JSON.stringify(replayState.state, null, 2)}
+                    </pre>
+                </div>
+            )}
+
+            {/* Multiverse Diff View */}
+            {activeDiffBranch && (
+                <div className="mt-6">
+                    <MultiverseView
+                        traceId={traceId}
+                        baseEvents={events}
+                        branch={activeDiffBranch}
+                    />
+                </div>
+            )}
+
+            {/* Branch selector for diff */}
+            {branches.length > 0 && !activeDiffBranch && (
+                <div className="mt-6 flex items-center gap-3 font-mono text-xs opacity-60">
+                    <span className="uppercase">Branches available —</span>
+                    {branches.map((b: any) => (
+                        <button
+                            key={b.id}
+                            onClick={() => setActiveDiffBranch(b)}
+                            className="px-3 py-1 rounded border border-border/50 hover:border-brand/50 hover:text-brand transition-colors"
+                        >
+                            Diff: {b.name ?? b.id.slice(0, 10)}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {activeDiffBranch && (
+                <button
+                    onClick={() => setActiveDiffBranch(null)}
+                    className="mt-2 font-mono text-[10px] opacity-40 hover:opacity-80"
+                >
+                    ✕ close diff
+                </button>
+            )}
         </div>
+    );
+}
+
+export default function TraceDetailPage() {
+    return (
+        <BranchingProvider>
+            <TraceDetailInner />
+        </BranchingProvider>
     );
 }

@@ -23,16 +23,21 @@ interface TraceEvent {
 
 interface TraceEventRowProps {
     event: TraceEvent;
+    expectedEvent?: TraceEvent;
     isSelected: boolean;
     onSelect: () => void;
     traceId: string;
     scriptContent?: string;
 }
 
-export function TraceEventRow({ event, isSelected, onSelect, traceId, scriptContent }: TraceEventRowProps) {
+export function TraceEventRow({ event, expectedEvent, isSelected, onSelect, traceId, scriptContent }: TraceEventRowProps) {
     const { createBranch, isLoading } = useBranching();
     const [isForkOpen, setIsForkOpen] = useState(false);
     const [overrideJson, setOverrideJson] = useState(JSON.stringify(event.payload, null, 2));
+
+    const isDivergent = expectedEvent && JSON.stringify(event.payload) !== JSON.stringify(expectedEvent.payload);
+    const isNewType = expectedEvent && event.type !== expectedEvent.type;
+    const isMismatch = isDivergent || isNewType;
 
     const handleFork = async () => {
         try {
@@ -49,7 +54,8 @@ export function TraceEventRow({ event, isSelected, onSelect, traceId, scriptCont
             onClick={onSelect}
             className={cn(
                 "p-4 cursor-pointer transition-all hover:bg-white/[0.03] group flex items-start gap-4 relative pr-12",
-                isSelected && "bg-brand/5 border-l-2 border-l-brand"
+                isSelected && "bg-brand/5 border-l-2 border-l-brand",
+                !isSelected && isMismatch && "bg-red-500/5 border-l-2 border-l-red-500"
             )}
         >
             <div className="mt-1 opacity-40 group-hover:opacity-100 text-[10px] tabular-nums">
@@ -62,15 +68,25 @@ export function TraceEventRow({ event, isSelected, onSelect, traceId, scriptCont
                         event.type === 'thought' ? 'bg-purple-500/10 text-purple-400' :
                             event.type === 'tool_call' ? 'bg-orange-500/10 text-orange-400' :
                                 event.type === 'tool_result' ? 'bg-green-500/10 text-green-400' :
-                                    'bg-gray-500/10 text-gray-400'
+                                    event.type === 'file_write' ? 'bg-blue-500/10 text-blue-400' :
+                                        'bg-gray-500/10 text-gray-400'
                     )}>
                         {event.type}
                     </span>
-                    <span className="opacity-80 text-[10px] line-clamp-1">
+                    {isMismatch && (
+                        <span className="px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold uppercase bg-red-500/20 text-red-500 border border-red-500/30 animate-pulse">
+                            DIVERGED
+                        </span>
+                    )}
+                    <span className={cn(
+                        "opacity-80 text-[10px] line-clamp-1",
+                        isMismatch && "text-red-400 font-bold"
+                    )}>
                         {event.type === 'thought' ? event.payload.thought :
                             event.type === 'tool_call' ? event.payload.name :
                                 event.type === 'tool_result' ? event.payload.tool_name :
-                                    JSON.stringify(event.payload).slice(0, 100)}
+                                    event.type === 'file_write' ? event.payload.path :
+                                        JSON.stringify(event.payload).slice(0, 100)}
                     </span>
                 </div>
             </div>

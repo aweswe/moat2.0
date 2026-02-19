@@ -1,87 +1,106 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import path from "path";
-import fs from "fs";
 
-const execAsync = promisify(exec);
+/**
+ * Run a Python helper script via spawn (cross-platform, no cmd /c needed).
+ * Returns parsed JSON from stdout, throws on non-zero exit.
+ */
+function runPythonHelper(scriptName: string, args: string[]): Promise<any> {
+    return new Promise((resolve, reject) => {
+        const projectRoot = getProjectRoot();
+        const scriptPath = path.join(projectRoot, "scripts", scriptName);
 
+        const child = spawn("python", [scriptPath, ...args], {
+            cwd: projectRoot,
+            env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONPATH: projectRoot },
+        });
+
+        let stdout = "";
+        let stderr = "";
+
+        child.stdout.on("data", (d) => { stdout += d.toString(); });
+        child.stderr.on("data", (d) => { stderr += d.toString(); });
+
+        child.on("close", (code) => {
+            if (stderr) console.error("[API] Python stderr:", stderr);
+            try {
+                // Ignore noise like "Storage endpoint URL should have a trailing slash"
+                const lines = stdout.split("\n");
+                const jsonLine = lines.find(l => l.trim().startsWith("{") && l.trim().endsWith("}"));
+
+                if (!jsonLine) {
+                    throw new Error(`No JSON object found in Python output. Raw output: ${stdout || stderr}`);
+                }
+
+                const result = JSON.parse(jsonLine);
+                if (code !== 0 || result.success === false) {
+                    const err = new Error(result.error || `Python exited with code ${code}`);
+                    (err as any).pythonTraceback = result.traceback || stderr;
+                    reject(err);
+                } else {
+                    resolve(result);
+                }
+            } catch (e: any) {
+                reject(new Error(`Failed to parse Python output (exit ${code}): ${e.message}`));
+            }
+        });
+    });
+}
+
+function getProjectRoot(): string {
+    const cwd = process.cwd();
+    if (cwd.includes("apps") && cwd.includes("web")) {
+        return path.resolve(cwd, "../../");
+    }
+    return cwd;
+}
+
+/**
+ * POST /api/replay
+ * Body: { traceId: string, step?: number, branch?: string }
+ *
+ * Returns hydrated state from the recorded event stream.
+ * Does NOT re-execute any script — pure event replay.
+ */
 export async function POST(req: Request) {
     try {
         const { traceId, step, branch } = await req.json();
 
         if (!traceId) {
-            return NextResponse.json({ error: "Trace ID is required" }, { status: 400 });
+            return NextResponse.json({ error: "traceId is required" }, { status: 400 });
         }
 
-        // Run the agenttrace CLI replay command with --run
-        // Note: We need to ensure we are in the project root or relevant directory.
-        // Assuming the node process runs from project root.
-        // We use 'python -m agenttrace.cli' assuming it's in the path or virtualenv.
-        // In this dev environment, 'python' likely refers to the system python which has the package installed
-        // OR we are running inside the monorepo where we might need to point to the module.
-        // Given previous commands worked with `python -m agenttrace.cli`, we use that.
-        // We also need to set CWD to valid project root.
-
-        // Determine project root
-        let cwd = process.cwd();
-        let projectRoot;
-
-        if (cwd.includes("apps") && cwd.includes("web")) {
-            // We are in apps/web, go up two levels to reach moat2.0 root
-            projectRoot = path.resolve(cwd, "../../");
-        } else {
-            // Assume we are in root
-            projectRoot = cwd;
-        }
-
-        let cmd = `replay ${traceId} --run`;
-        if (step !== undefined) {
-            cmd += ` --step ${step}`;
+        const args: string[] = ["--trace-id", traceId];
+        if (step !== undefined && step !== null) {
+            args.push("--step", String(step));
         }
         if (branch) {
-            cmd += ` --branch "${branch}"`;
+            args.push("--branch", branch);
         }
 
-        const command = `cmd /c "chcp 65001 > nul && set PYTHONIOENCODING=utf-8 && set PYTHONPATH=${projectRoot} && python -m agenttrace.cli ${cmd}"`;
-        console.log(`[API] Executing replay command: ${command}`);
-
-        // We execute from the project root (process.cwd())
-        // The previous CLI fix ensures it finds .agenttrace recursively.
-        const { stdout, stderr } = await execAsync(command, { cwd: projectRoot });
-
-        console.log("[API] Replay Stdout:", stdout);
-        if (stderr) console.error("[API] Replay Stderr:", stderr);
-
-        // Parse stdout to find the NEW trace ID
-        // Support multiple possible formats from different parts of the SDK/CLI
-        const traceIdRegex = /(?:Trace registered in Supabase:|Trace recorded:|Trace ID:)\s*([a-f0-9-]+)/i;
-        const match = stdout.match(traceIdRegex);
-        const newTraceId = match ? match[1] : null;
-
-        console.log(`[API] Extracted New Trace ID: ${newTraceId}`);
+        console.log("[API /replay] Running replay_handler.py with args:", args);
+        const result = await runPythonHelper("replay_handler.py", args);
 
         return NextResponse.json({
             success: true,
-            newTraceId,
-            output: stdout,
-            debug: {
-                moatPath: projectRoot,
-                command
-            }
+            traceId: result.traceId,
+            branch: result.branch ?? null,
+            step: result.step ?? null,
+            maxStep: result.maxStep,
+            eventCount: result.eventCount,
+            events: result.events,
+            state: result.state,
+            parentHash: result.parentHash,
+            metadata: result.metadata,
         });
 
     } catch (error: any) {
-        console.error("[API] Replay error:", error);
-
-        // Detect "Branch already exists" and return 409
-        const isConflict = error.stdout?.includes("already exists") || error.stderr?.includes("already exists");
-
+        console.error("[API /replay] Error:", error.message);
         return NextResponse.json({
-            error: isConflict ? "Branch already exists" : "Failed to execute replay",
+            error: "Replay failed",
             details: error.message,
-            stdout: error.stdout,
-            stderr: error.stderr
-        }, { status: isConflict ? 409 : 500 });
+            traceback: error.pythonTraceback ?? null,
+        }, { status: 500 });
     }
 }
