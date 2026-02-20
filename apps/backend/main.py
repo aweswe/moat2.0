@@ -167,9 +167,18 @@ def get_replay_events(req: ReplayRequest):
     """
     client = get_supabase_client()
     
-    # 1. Get branch info
+    # 1. Handle Main Trace Replay (No Branch ID)
     if not req.branch_id:
-         raise HTTPException(status_code=400, detail="branch_id is required")
+        events = download_events(client, req.trace_id)
+        return {
+            "success": True,
+            "events": events,
+            "eventCount": len(events),
+            "branchId": None,
+            "forkStep": None
+        }
+
+    # 2. Handle Branch Replay
 
     branch_res = client.table("branches").select("*").eq("id", req.branch_id).execute()
     if not branch_res.data:
