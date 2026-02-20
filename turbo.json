@@ -10,6 +10,18 @@
                 "$TURBO_DEFAULT$",
                 ".env*"
             ],
+            "env": [
+                "NEXT_PUBLIC_SUPABASE_URL",
+                "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+                "SUPABASE_SERVICE_ROLE_KEY",
+                "SUPABASE_JWT_SECRET",
+                "POSTGRES_URL",
+                "GROQ_API_KEY",
+                "WORKER_POLL_INTERVAL",
+                "AGENTTRACE_API_URL",
+                "AGENTTRACE_API_KEY",
+                "EXECUTION_ENGINE_URL"
+            ],
             "outputs": [
                 ".next/**",
                 "!.next/cache/**",
