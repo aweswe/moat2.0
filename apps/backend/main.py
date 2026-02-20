@@ -196,12 +196,11 @@ def get_replay_events(req: ReplayRequest):
     
     for ev in events:
         seq = ev.get("seq", 0)
-        
-        # Stop at fork step. Everything after this happens in the new multiverse line.
-        if seq > fork_step:
-            break
-            
         evt_copy = dict(ev)
+        
+        # Mark events after the fork step as hypothetical branch events
+        if seq > fork_step:
+            evt_copy["_branched"] = True
         
         # If this is the fork step AND we have an override for it, patch the payload
         str_seq = str(seq)

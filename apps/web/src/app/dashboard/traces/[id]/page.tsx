@@ -485,7 +485,7 @@ function TraceDetailInner() {
                         <span>Hash: <span className="text-foreground opacity-60">{replayState.parentHash?.slice(0, 12)}…</span></span>
                     </div>
                     <pre className="text-[10px] font-mono bg-black/40 border border-white/5 rounded p-3 max-h-[300px] overflow-auto text-brand/80">
-                        {JSON.stringify(replayState.state, null, 2)}
+                        {JSON.stringify(replayState.events, null, 2)}
                     </pre>
                 </div>
             )}
