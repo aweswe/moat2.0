@@ -66,7 +66,7 @@ def run(name: Optional[str] = None):
                 
                 try:
                     result = await func(*args, **kwargs)
-                    status = "success"
+                    status = "completed"
                 except Exception as e:
                     status = "failed"
                     _push_event({
@@ -85,11 +85,13 @@ def run(name: Optional[str] = None):
                         "payload": {"status": status}
                     })
                     
-                    trace_data["spans"][0]["end_time"] = time.time()
-                    trace_data["spans"][0]["start_time"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(trace_data["spans"][0]["start_time"]))
-                    trace_data["spans"][0]["end_time"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+                    end_time = time.time()
+                    start_time_raw = trace_data["spans"][0]["start_time"]
+                    trace_data["spans"][0]["start_time"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(start_time_raw))
+                    trace_data["spans"][0]["end_time"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(end_time))
                     trace_data["metadata"]["status"] = status
-                    trace_data["metadata"]["step_count"] = trace_data["event_count"]
+                    trace_data["metadata"]["event_count"] = trace_data["event_count"]
+                    trace_data["metadata"]["duration_s"] = round(end_time - start_time_raw, 2)
                     
                     # Submit to background client
                     AgentTraceClient.send_trace(trace_data)
@@ -132,7 +134,7 @@ def run(name: Optional[str] = None):
                 
                 try:
                     result = func(*args, **kwargs)
-                    status = "success"
+                    status = "completed"
                 except Exception as e:
                     status = "failed"
                     _push_event({
@@ -150,11 +152,13 @@ def run(name: Optional[str] = None):
                         "payload": {"status": status}
                     })
                     
-                    trace_data["spans"][0]["end_time"] = time.time()
-                    trace_data["spans"][0]["start_time"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(trace_data["spans"][0]["start_time"]))
-                    trace_data["spans"][0]["end_time"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+                    end_time = time.time()
+                    start_time_raw = trace_data["spans"][0]["start_time"]
+                    trace_data["spans"][0]["start_time"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(start_time_raw))
+                    trace_data["spans"][0]["end_time"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(end_time))
                     trace_data["metadata"]["status"] = status
-                    trace_data["metadata"]["step_count"] = trace_data["event_count"]
+                    trace_data["metadata"]["event_count"] = trace_data["event_count"]
+                    trace_data["metadata"]["duration_s"] = round(end_time - start_time_raw, 2)
                     
                     AgentTraceClient.send_trace(trace_data)
                     _trace_ctx.reset(token)
