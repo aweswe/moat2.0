@@ -41,6 +41,21 @@ class ReplayRequest(BaseModel):
 # --- Internal Helpers ported from branch_handler.py and replay_handler.py ---
 
 def download_events(client, trace_id: str) -> list:
+    """
+    Fetch events for a trace. Tries two sources:
+    1. trace_events DB table (SDK-ingested traces via /api/trace/register)
+    2. Supabase Storage events.jsonl (legacy CLI-ingested traces)
+    """
+    # --- Source 1: Database table (SDK path) ---
+    try:
+        res = client.table("trace_events").select("*").eq("trace_id", trace_id).order("seq").execute()
+        if res.data and len(res.data) > 0:
+            print(f"[Events] Loaded {len(res.data)} events from trace_events table for {trace_id}")
+            return res.data
+    except Exception as e:
+        print(f"[Events] DB query failed: {e}")
+
+    # --- Source 2: Storage file (legacy CLI path) ---
     try:
         blob = client.storage.from_("traces").download(f"{trace_id}/events.jsonl")
         if blob:
@@ -55,10 +70,12 @@ def download_events(client, trace_id: str) -> list:
                         continue
             events.sort(key=lambda e: e.get("seq", 0))
             if events:
+                print(f"[Events] Loaded {len(events)} events from Storage for {trace_id}")
                 return events
     except Exception as e:
-        print(f"Storage download failed: {e}")
-        raise HTTPException(status_code=404, detail=f"No trace events found for trace {trace_id}")
+        print(f"[Events] Storage download failed: {e}")
+
+    raise HTTPException(status_code=404, detail=f"No trace events found for trace {trace_id}")
 
 def compute_hash(events: list, up_to_step: int) -> str:
     """SHA256 of events 0..up_to_step (deterministic, no timestamps)."""
