@@ -11,6 +11,19 @@ import { supabase } from "@/lib/supabase";
 import crypto from "crypto";
 
 export default function JoinPage() {
+    return (
+        <React.Suspense fallback={
+            <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+                <Loader2 className="w-8 h-8 animate-spin text-brand mb-4" />
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Loading...</span>
+            </div>
+        }>
+            <JoinPageContent />
+        </React.Suspense>
+    );
+}
+
+function JoinPageContent() {
     const { user } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
