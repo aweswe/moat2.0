@@ -8,7 +8,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Shield, Users, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
-import crypto from "crypto";
 
 export default function JoinPage() {
     return (
