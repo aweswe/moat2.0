@@ -3,7 +3,7 @@ services:
     name: agenttrace-execution-engine
     runtime: python
     rootDir: apps/backend
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install ../packages/python-sdk && pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: NEXT_PUBLIC_SUPABASE_URL
