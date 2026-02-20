@@ -8,7 +8,11 @@ const EXECUTION_ENGINE_URL = process.env.EXECUTION_ENGINE_URL || "http://127.0.0
  * POST /api/replay
  * Body: { traceId: string, step?: number, branch?: string }
  *
- * Returns hydrated state from the recorded event stream via FastAPI Backend.
+ * Calls the deterministic execution sandbox and returns:
+ *   - stdout (full sandbox log)
+ *   - replay_fingerprint (SHA-256)
+ *   - events_consumed
+ *   - branch metadata (if forked)
  */
 export async function POST(req: Request) {
     try {
@@ -23,20 +27,20 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        // Verify user auth
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
         const supabaseRest = createClient(supabaseUrl!, supabaseAnonKey, {
             auth: { persistSession: false }
         });
 
         const token = authHeader.replace('Bearer ', '');
         const { data: { user }, error: authError } = await supabaseRest.auth.getUser(token);
-
         if (authError || !user) {
             return NextResponse.json({ error: "Unauthorized", details: authError?.message }, { status: 401 });
         }
 
+        // Verify org access
         const supabase = supabaseAdmin;
         const { data: membership, error: memberError } = await supabase
             .from('org_members')
@@ -59,17 +63,24 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Trace not found" }, { status: 404 });
         }
 
-        const enginePayload = {
-            trace_id: traceId,
-            step: step !== undefined ? step : null,
-            branch_id: branch || null
-        };
+        // Call the deterministic execution sandbox
+        const enginePayload: Record<string, any> = { trace_id: traceId };
+        if (branch) enginePayload.branch_id = branch;
 
-        const engineResponse = await fetch(`${EXECUTION_ENGINE_URL}/replay/events`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(enginePayload)
-        });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90_000);
+
+        let engineResponse: Response;
+        try {
+            engineResponse = await fetch(`${EXECUTION_ENGINE_URL}/replay/execute`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(enginePayload),
+                signal: controller.signal
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
 
         if (!engineResponse.ok) {
             const errResult = await engineResponse.json().catch(() => ({}));
@@ -78,34 +89,19 @@ export async function POST(req: Request) {
 
         const result = await engineResponse.json();
 
-        // Normalize events to match the format from /api/trace/events
-        const normalizedEvents = (result.events || []).map((e: any) => {
-            const seq = e.seq ?? e.step ?? 0;
-            const type = e.type ?? e.event_type ?? "unknown";
-            const timestamp = e.timestamp ?? null;
-
-            const payloadContent = { ...e };
-            delete payloadContent.seq;
-            delete payloadContent.step;
-            delete payloadContent.type;
-            delete payloadContent.event_type;
-            delete payloadContent.timestamp;
-
-            return {
-                seq,
-                timestamp,
-                type,
-                ...payloadContent,
-                payload: payloadContent
-            };
-        });
-
         return NextResponse.json({
-            success: true,
-            events: normalizedEvents,
-            eventCount: result.eventCount,
-            branchId: result.branchId,
-            forkStep: result.forkStep
+            success: result.success,
+            stdout: result.stdout ?? "",
+            stderr: result.stderr ?? "",
+            exitCode: result.exit_code,
+            replayFingerprint: result.replay_fingerprint,
+            eventsConsumed: result.events_consumed,
+            branch: result.branch ?? null,
+            events: result.new_events ?? [],
+            eventCount: result.events_consumed,
+            step: step ?? null,
+            parentHash: result.replay_fingerprint,
+            maxStep: result.events_consumed,
         });
 
     } catch (e: any) {

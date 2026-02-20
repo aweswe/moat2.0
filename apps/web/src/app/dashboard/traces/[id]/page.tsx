@@ -250,7 +250,7 @@ function TraceDetailInner() {
                     </Button>
                     <Button
                         size="sm"
-                        className="font-mono text-[10px]"
+                        className="font-mono text-[10px] bg-green-600 hover:bg-green-500"
                         disabled={isReplaying}
                         onClick={async () => {
                             try {
@@ -259,7 +259,6 @@ function TraceDetailInner() {
 
                                 const { data: { session }, error: sessionError } = await supabase.auth.getSession();
                                 if (sessionError || !session?.access_token) {
-                                    console.error("Replay failed: No active session", sessionError);
                                     alert("Authentication failed. Please sign in again.");
                                     return;
                                 }
@@ -270,15 +269,18 @@ function TraceDetailInner() {
                                         'Content-Type': 'application/json',
                                         'Authorization': `Bearer ${session.access_token}`
                                     },
-                                    body: JSON.stringify({ traceId, step: currentStep })
+                                    body: JSON.stringify({
+                                        traceId,
+                                        branch: activeBranchId || undefined
+                                    })
                                 });
                                 const data = await res.json();
                                 if (!res.ok) throw new Error(data.details || data.error || "Unknown server error");
                                 setReplayState(data);
                                 setShowReplayPanel(true);
                             } catch (e: any) {
-                                console.error("Replay failed", e);
-                                alert(`Replay failed: ${e.message}`);
+                                console.error("Sandbox replay failed", e);
+                                alert(`Sandbox failed: ${e.message}`);
                             } finally {
                                 setIsReplaying(false);
                             }
@@ -287,10 +289,11 @@ function TraceDetailInner() {
                         {isReplaying ? (
                             <Clock className="w-3 h-3 mr-2 animate-spin" />
                         ) : (
-                            <Zap className="w-3 h-3 mr-2" />
+                            <Cpu className="w-3 h-3 mr-2" />
                         )}
-                        {isReplaying ? "LOADING..." : "QUICK_PREVIEW"}
+                        {isReplaying ? "RUNNING..." : activeBranchId ? "RUN_BRANCH" : "RUN_SANDBOX"}
                     </Button>
+
                 </div>
             </div>
 
@@ -472,23 +475,60 @@ function TraceDetailInner() {
 
             {/* Replay State Panel */}
             {showReplayPanel && replayState && (
-                <div className="mt-6 rounded-lg border border-brand/20 bg-brand/5 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="font-mono text-xs font-bold uppercase text-brand flex items-center gap-2">
-                            <Zap className="w-3 h-3" /> Replayed_State @ Step {replayState.step ?? "all"}
+                <div className="mt-6 rounded-lg border border-green-500/20 bg-black/60 overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-green-500/20 bg-green-500/5">
+                        <span className="font-mono text-xs font-bold uppercase text-green-400 flex items-center gap-2">
+                            <Cpu className="w-3 h-3" />
+                            {replayState.branch ? `Branch Replay — ${replayState.branch.name ?? replayState.branch.branch_id?.slice(0, 8)}` : "Sandbox Replay"}
                         </span>
-                        <button onClick={() => setShowReplayPanel(false)} className="text-xs opacity-40 hover:opacity-80">✕ close</button>
+                        <div className="flex items-center gap-3">
+                            <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${replayState.exitCode === 0 ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
+                                {replayState.exitCode === 0 ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                                {replayState.exitCode === 0 ? 'DETERMINISTIC_PASS' : `EXIT_${replayState.exitCode}`}
+                            </div>
+                            <button onClick={() => setShowReplayPanel(false)} className="text-xs opacity-40 hover:opacity-80 font-mono">✕</button>
+                        </div>
                     </div>
-                    <div className="font-mono text-[10px] grid grid-cols-3 gap-3 mb-3 text-muted-foreground">
-                        <span>Events: <span className="text-foreground">{replayState.eventCount}</span></span>
-                        <span>Max Step: <span className="text-foreground">{replayState.maxStep}</span></span>
-                        <span>Hash: <span className="text-foreground opacity-60">{replayState.parentHash?.slice(0, 12)}…</span></span>
+
+                    {/* Stats row */}
+                    <div className="grid grid-cols-3 divide-x divide-white/5 border-b border-white/5">
+                        <div className="px-4 py-2 text-[10px] font-mono">
+                            <div className="text-muted-foreground uppercase opacity-60">Events Consumed</div>
+                            <div className="text-green-400 font-bold">{replayState.eventsConsumed ?? replayState.eventCount ?? '—'}</div>
+                        </div>
+                        <div className="px-4 py-2 text-[10px] font-mono">
+                            <div className="text-muted-foreground uppercase opacity-60">Fingerprint</div>
+                            <div className="text-brand font-bold font-mono">{replayState.replayFingerprint?.slice(0, 16) ?? replayState.parentHash?.slice(0, 12) ?? '—'}…</div>
+                        </div>
+                        <div className="px-4 py-2 text-[10px] font-mono">
+                            <div className="text-muted-foreground uppercase opacity-60">Fork Step</div>
+                            <div className="text-foreground">{replayState.branch?.fork_step ?? '—'}</div>
+                        </div>
                     </div>
-                    <pre className="text-[10px] font-mono bg-black/40 border border-white/5 rounded p-3 max-h-[300px] overflow-auto text-brand/80">
-                        {JSON.stringify(replayState.events, null, 2)}
-                    </pre>
+
+                    {/* Terminal stdout */}
+                    {replayState.stdout && (
+                        <div className="p-4">
+                            <div className="text-[9px] font-mono uppercase text-muted-foreground opacity-50 mb-2 flex items-center gap-1">
+                                <Terminal className="w-3 h-3" /> Sandbox Output
+                            </div>
+                            <pre className="text-[10px] font-mono text-green-300/80 bg-black/40 border border-white/5 rounded p-3 max-h-[300px] overflow-auto whitespace-pre-wrap leading-relaxed">
+                                {replayState.stdout.split('\n').filter((l: string) => l.trim()).join('\n')}
+                            </pre>
+                        </div>
+                    )}
+                    {replayState.stderr && (
+                        <div className="px-4 pb-4">
+                            <div className="text-[9px] font-mono uppercase text-red-400 opacity-70 mb-2">Stderr</div>
+                            <pre className="text-[10px] font-mono text-red-300 bg-red-500/5 border border-red-500/20 rounded p-3 max-h-[150px] overflow-auto">
+                                {replayState.stderr}
+                            </pre>
+                        </div>
+                    )}
                 </div>
             )}
+
 
             {/* Multiverse Diff View */}
             {activeDiffBranch && (

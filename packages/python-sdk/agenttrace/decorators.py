@@ -33,6 +33,10 @@ def run(name: Optional[str] = None):
         if is_async:
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
+                from .config import Config
+                from .interceptor import DeterministicInterceptor
+                import threading
+                
                 trace_id = str(uuid.uuid4())
                 trace_data = {
                     "trace_id": trace_id,
@@ -43,6 +47,7 @@ def run(name: Optional[str] = None):
                     },
                     "events": [],
                     "event_count": 0,
+                    "lock": threading.Lock(),
                     "spans": [{
                         "span_id": str(uuid.uuid4()),
                         "name": f"agent.{agent_name}",
@@ -57,13 +62,24 @@ def run(name: Optional[str] = None):
                 token = _trace_ctx.set(trace_data)
                 start_time_iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
                 
+                if Config.mode == "record":
+                    import random
+                    seed = random.randint(0, 1000000)
+                    random.seed(seed)
+                else:
+                    seed = Config.replay_events[0].get("payload", {}).get("seed", 42) if Config.replay_events else 42
+
                 _push_event({
                     "seq": 0,
                     "type": "agent_start",
                     "timestamp": start_time_iso,
-                    "payload": {"agent": agent_name, "args": repr(args)}
+                    "timestamp_epoch": time.time(),
+                    "payload": {"agent": agent_name, "args": repr(args), "seed": seed}
                 })
                 
+                interceptor = DeterministicInterceptor(mode=Config.mode, replay_events=Config.replay_events)
+                interceptor.setup()
+
                 try:
                     result = await func(*args, **kwargs)
                     status = "completed"
@@ -73,6 +89,7 @@ def run(name: Optional[str] = None):
                         "seq": trace_data["event_count"],
                         "type": "error",
                         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+                        "timestamp_epoch": time.time(),
                         "payload": {"error_type": type(e).__name__, "message": str(e)}
                     })
                     raise e
@@ -82,6 +99,7 @@ def run(name: Optional[str] = None):
                         "seq": trace_data["event_count"],
                         "type": "agent_complete",
                         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+                        "timestamp_epoch": time.time(),
                         "payload": {"status": status}
                     })
                     
@@ -92,16 +110,35 @@ def run(name: Optional[str] = None):
                     trace_data["metadata"]["status"] = status
                     trace_data["metadata"]["event_count"] = trace_data["event_count"]
                     trace_data["metadata"]["duration_s"] = round(end_time - start_time_raw, 2)
+                    trace_data.pop("lock", None)
                     
                     # Submit to background client
-                    AgentTraceClient.send_trace(trace_data)
+                    from .config import Config
+                    if Config.mode == "record":
+                        AgentTraceClient.send_trace(trace_data)
+                    else:
+                        import hashlib, json as _json
+                        events_consumed = len(Config.replay_events)
+                        replay_payload = _json.dumps(
+                            [{k: v for k, v in e.items() if k != "timestamp"} for e in trace_data["events"]],
+                            sort_keys=True, separators=(",", ":")
+                        )
+                        replay_hash = hashlib.sha256(replay_payload.encode()).hexdigest()[:16]
+                        print(f"[AgentTrace] Replay consumed {events_consumed} events from trace. Fingerprint: {replay_hash}")
+
+                        
                     _trace_ctx.reset(token)
+                    interceptor.teardown()
                     
                 return result
             return async_wrapper
         else:
             @wraps(func)
             def sync_wrapper(*args, **kwargs):
+                from .config import Config
+                from .interceptor import DeterministicInterceptor
+                import threading
+                
                 trace_id = str(uuid.uuid4())
                 trace_data = {
                     "trace_id": trace_id,
@@ -112,6 +149,7 @@ def run(name: Optional[str] = None):
                     },
                     "events": [],
                     "event_count": 0,
+                    "lock": threading.Lock(),
                     "spans": [{
                         "span_id": str(uuid.uuid4()),
                         "name": f"agent.{agent_name}",
@@ -125,13 +163,24 @@ def run(name: Optional[str] = None):
                 token = _trace_ctx.set(trace_data)
                 start_time_iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
                 
+                if Config.mode == "record":
+                    import random
+                    seed = random.randint(0, 1000000)
+                    random.seed(seed)
+                else:
+                    seed = Config.replay_events[0].get("payload", {}).get("seed", 42) if Config.replay_events else 42
+
                 _push_event({
                     "seq": 0,
                     "type": "agent_start",
                     "timestamp": start_time_iso,
-                    "payload": {"agent": agent_name, "args": repr(args)}
+                    "timestamp_epoch": time.time(),
+                    "payload": {"agent": agent_name, "args": repr(args), "seed": seed}
                 })
                 
+                interceptor = DeterministicInterceptor(mode=Config.mode, replay_events=Config.replay_events)
+                interceptor.setup()
+
                 try:
                     result = func(*args, **kwargs)
                     status = "completed"
@@ -141,6 +190,7 @@ def run(name: Optional[str] = None):
                         "seq": trace_data["event_count"],
                         "type": "error",
                         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+                        "timestamp_epoch": time.time(),
                         "payload": {"error_type": type(e).__name__, "message": str(e)}
                     })
                     raise e
@@ -149,6 +199,7 @@ def run(name: Optional[str] = None):
                         "seq": trace_data["event_count"],
                         "type": "agent_complete",
                         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+                        "timestamp_epoch": time.time(),
                         "payload": {"status": status}
                     })
                     
@@ -159,9 +210,24 @@ def run(name: Optional[str] = None):
                     trace_data["metadata"]["status"] = status
                     trace_data["metadata"]["event_count"] = trace_data["event_count"]
                     trace_data["metadata"]["duration_s"] = round(end_time - start_time_raw, 2)
+                    trace_data.pop("lock", None)
                     
-                    AgentTraceClient.send_trace(trace_data)
+                    from .config import Config
+                    if Config.mode == "record":
+                        AgentTraceClient.send_trace(trace_data)
+                    else:
+                        import hashlib, json as _json
+                        events_consumed = len(Config.replay_events)
+                        replay_payload = _json.dumps(
+                            [{k: v for k, v in e.items() if k != "timestamp"} for e in trace_data["events"]],
+                            sort_keys=True, separators=(",", ":")
+                        )
+                        replay_hash = hashlib.sha256(replay_payload.encode()).hexdigest()[:16]
+                        print(f"[AgentTrace] Replay consumed {events_consumed} events from trace. Fingerprint: {replay_hash}")
+
+                        
                     _trace_ctx.reset(token)
+                    interceptor.teardown()
                     
                 return result
             return sync_wrapper
@@ -193,6 +259,7 @@ class step:
             "seq": ctx["event_count"],
             "type": self.type,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+            "timestamp_epoch": time.time(),
             "payload": self.payload
         }
         ctx["event_count"] += 1
