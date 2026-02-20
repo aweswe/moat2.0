@@ -324,23 +324,19 @@ def execute_replay(req: ExecuteReplayRequest):
         # Write Output target
         output_file_path = os.path.join(temp_dir, "new_trace.json")
             
-        # Prepare strictly isolated env
-        
-        # If running locally (for MVP testing), make sure the local SDK is in PYTHONPATH
+        # Add the backend directory itself to PYTHONPATH so the bundled `agenttrace` is importable
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
         python_path = os.environ.get("PYTHONPATH", "")
-        if not python_path and os.name == 'nt':
-            # Assuming main.py is in apps/backend and sdk is in packages/python-sdk
-            backend_dir = os.path.dirname(os.path.abspath(__file__))
-            repo_root = os.path.abspath(os.path.join(backend_dir, "..", ".."))
-            sdk_path = os.path.join(repo_root, "packages", "python-sdk")
-            if os.path.exists(sdk_path):
-                python_path = sdk_path
-                
+        if python_path:
+            python_path = f"{backend_dir}:{python_path}" if os.name != 'nt' else f"{backend_dir};{python_path}"
+        else:
+            python_path = backend_dir
+
         sandbox_env = {
             "AGENTTRACE_MODE": "replay",
             "AGENTTRACE_REPLAY_EVENTS_FILE": events_file_path,
             "AGENTTRACE_REPLAY_OUTPUT_FILE": output_file_path,
-            "PYTHONPATH": python_path # ensure agenttrace SDK is visible
+            "PYTHONPATH": python_path # ensure bundled agenttrace SDK is visible
         }
         
         try:
