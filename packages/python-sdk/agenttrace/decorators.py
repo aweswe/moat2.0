@@ -16,6 +16,20 @@ def run(name: Optional[str] = None):
         is_async = inspect.iscoroutinefunction(func)
         agent_name = name or func.__name__
 
+        # Auto-capture source code at decoration time
+        try:
+            _source_code = inspect.getsource(func)
+        except (OSError, TypeError):
+            _source_code = ""
+        
+        # Also try to capture the entire file
+        try:
+            _source_file = inspect.getfile(func)
+            with open(_source_file, "r", encoding="utf-8") as f:
+                _full_file_source = f.read()
+        except (OSError, TypeError):
+            _full_file_source = _source_code
+
         if is_async:
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
@@ -36,8 +50,7 @@ def run(name: Optional[str] = None):
                         "start_time": time.time(),
                         "attributes": {}
                     }],
-                    # TODO: capture source code
-                    "source_code": ""
+                    "source_code": _full_file_source
                 }
                 
                 # Setup context
@@ -104,7 +117,7 @@ def run(name: Optional[str] = None):
                         "start_time": time.time(),
                         "attributes": {}
                     }],
-                    "source_code": ""
+                    "source_code": _full_file_source
                 }
                 
                 token = _trace_ctx.set(trace_data)
