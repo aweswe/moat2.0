@@ -18,8 +18,8 @@ export default {
         },
         extend: {
             fontFamily: {
-                sans: ["Space Grotesk", "sans-serif"],
-                mono: ["JetBrains Mono", "monospace"],
+                sans: ["Inter", "system-ui", "sans-serif"],
+                mono: ["JetBrains Mono", "Fira Code", "monospace"],
             },
             colors: {
                 border: "hsl(var(--border))",

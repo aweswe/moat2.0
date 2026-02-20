@@ -2,31 +2,41 @@
 
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, BookOpen } from "lucide-react";
+import { ArrowRight, GitBranch, BookOpen } from "lucide-react";
 import Link from "next/link";
 
 export const FinalCTASection = () => {
     return (
         <section className="py-32 bg-background relative overflow-hidden border-t border-border">
-            {/* Background Ambience - Subtle Glow */}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-brand/5 pointer-events-none" />
+            {/* Background glow */}
+            <div className="absolute inset-0 pointer-events-none"
+                style={{ background: "radial-gradient(ellipse 60% 50% at 50% 100%, hsl(var(--brand) / 0.07) 0%, transparent 70%)" }}
+            />
 
             <div className="container relative z-10">
                 <div className="max-w-4xl mx-auto text-center">
 
-                    {/* Main Copy */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6 }}
                     >
-                        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-6">
-                            Ready to make your agents <span className="text-muted-foreground">reproducible?</span>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand/30 bg-brand/5 mb-8">
+                            <GitBranch className="w-3.5 h-3.5 text-brand" />
+                            <span className="text-xs font-semibold text-brand tracking-wide">Free to start · No credit card</span>
+                        </div>
+
+                        <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6" style={{ lineHeight: 1.08 }}>
+                            Your agent just crashed<br />
+                            in production.<br />
+                            <span className="text-gradient-brand">What if you could rewind it?</span>
                         </h2>
-                        <p className="text-xl text-muted-foreground/80 leading-relaxed max-w-2xl mx-auto mb-10 font-light">
-                            Add determinism to your agent runtime in minutes.<br className="hidden md:block" />
-                            No code rewrites. No risk to production.
+
+                        <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl mx-auto mb-10">
+                            Add <code className="text-sm font-mono bg-muted px-2 py-0.5 rounded border border-border">pip install agenttrace</code>,
+                            run your agent, and get a full execution record.
+                            Then fork it. Rewind it. Fix it. <strong className="text-foreground">Ship it.</strong>
                         </p>
                     </motion.div>
 
@@ -35,38 +45,51 @@ export const FinalCTASection = () => {
                         initial={{ opacity: 0, y: 10 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        transition={{ duration: 0.6, delay: 0.1 }}
-                        className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
+                        transition={{ duration: 0.5, delay: 0.15 }}
+                        className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10"
                     >
                         <Link href="/signup">
                             <Button
-                                size="xl"
-                                className="bg-foreground text-background hover:bg-foreground/90 font-bold"
+                                size="lg"
+                                className="h-13 px-8 text-base font-bold rounded-xl group"
+                                style={{ boxShadow: "0 4px 28px hsl(var(--brand) / 0.3)" }}
                             >
-                                Get Started for Free
+                                Start Forking for Free
+                                <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                             </Button>
                         </Link>
 
-                        <Button
-                            variant="outline"
-                            size="lg"
-                            className="h-12 px-8 text-base border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors w-full sm:w-auto"
-                        >
-                            <BookOpen className="mr-2 w-4 h-4" />
-                            Read the integration guide
-                        </Button>
+                        <Link href="/docs">
+                            <Button
+                                variant="outline"
+                                size="lg"
+                                className="h-13 px-8 text-base font-medium rounded-xl"
+                            >
+                                <BookOpen className="mr-2 w-4 h-4" />
+                                5-minute quickstart
+                            </Button>
+                        </Link>
                     </motion.div>
 
-                    {/* Trust Line */}
+                    {/* Social proof / trust */}
                     <motion.div
                         initial={{ opacity: 0 }}
                         whileInView={{ opacity: 1 }}
                         viewport={{ once: true }}
-                        transition={{ duration: 0.6, delay: 0.2 }}
+                        transition={{ delay: 0.3 }}
+                        className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground"
                     >
-                        <p className="text-sm font-mono text-muted-foreground/60">
-                            Works with LangChain, custom agents, and in-house frameworks.
-                        </p>
+                        {[
+                            "Works with any LLM",
+                            "Python + Node SDK",
+                            "Framework-agnostic",
+                            "RBAC for teams",
+                        ].map((item) => (
+                            <span key={item} className="flex items-center gap-1.5">
+                                <span className="w-1 h-1 rounded-full bg-brand/60" />
+                                {item}
+                            </span>
+                        ))}
                     </motion.div>
 
                 </div>

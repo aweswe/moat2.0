@@ -1,56 +1,57 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  RotateCcw,
-  Clock,
-  Shield,
-  FileText,
-  Sparkles,
-  ArrowRight
-} from "lucide-react";
+import { GitBranch, Rewind, Play, Shield, FileText, Layers, ArrowRight } from "lucide-react";
 
-// Enterprise-Grade Copy
 const capabilities = [
   {
-    id: "core",
+    id: "fork",
     label: "CORE PRIMITIVE",
-    icon: RotateCcw,
-    title: "Deterministic Replay",
-    description: "Replay any agent execution with bit-perfect fidelity. Every LLM response, timestamp, random value, and side effect is reproduced exactly as recorded.",
-    colSpan: "lg:col-span-2",
-    isCore: true
+    icon: GitBranch,
+    title: "Fork from Any Step",
+    description: "The thing no other tool does. Pick any moment in your agent's execution — step 3 or step 47 — and branch reality from there. Change a prompt, swap a tool result, inject a different LLM response, and run the new universe. Your agent doesn't know it's in a fork.",
+    colSpan: "lg:col-span-3",
+    isCore: true,
   },
   {
-    id: "control-1",
-    label: "TEMPORAL CONTROL",
-    icon: Clock,
-    title: "Time-Travel Debugging",
-    description: "Move freely backward and forward through execution. Jump to any step, inspect state, and fix issues at the source.",
+    id: "multiverse",
+    label: "MULTIVERSE",
+    icon: Layers,
+    title: "What If × N",
+    description: "Don't just fork once. Run 10 parallel what-ifs simultaneously. Each branch is its own universe — different prompt, different model, different assumption. Compare outcomes. Ship the one that works.",
+    colSpan: "lg:col-span-3",
+    isCore: true,
+  },
+  {
+    id: "replay",
+    label: "DETERMINISTIC REPLAY",
+    icon: Play,
+    title: "Bit-Perfect Replay",
+    description: "Rewind any production failure and re-run it exactly — same LLM tokens, same timestamps, same randomness. In a sandbox. Zero risk to prod.",
     colSpan: "lg:col-span-2",
   },
   {
-    id: "control-2",
-    label: "SAFETY BOUNDARY",
+    id: "timetravel",
+    label: "TIME TRAVEL",
+    icon: Rewind,
+    title: "Rewind to Any Step",
+    description: "Jump backward to the exact moment your agent went wrong. Inspect full state: context window, tool results, memory. Then fork from there.",
+    colSpan: "lg:col-span-2",
+  },
+  {
+    id: "sandbox",
+    label: "SANDBOXED",
     icon: Shield,
-    title: "Sandboxed Execution",
-    description: "Reproduce failures in complete isolation. No real API calls or database writes—your production environment remains untouched.",
+    title: "Safe Re-execution",
+    description: "Every replay and fork runs completely isolated. No real API calls. No database writes. Your production system is never touched.",
     colSpan: "lg:col-span-2",
   },
   {
-    id: "audit-1",
+    id: "audit",
     label: "AUDIT LAYER",
     icon: FileText,
     title: "Execution Ledger",
-    description: "An immutable, audit-grade record of every agent action. Full lineage from input to output, built for compliance and root-cause analysis.",
-    colSpan: "lg:col-span-3",
-  },
-  {
-    id: "intel-1",
-    label: "INTELLIGENCE",
-    icon: Sparkles,
-    title: "Auto-Fix Insights",
-    description: "Analyze real execution data to surface failure patterns. Understand why agents break—and how to prevent it before it ships.",
+    description: "An immutable record of every agent action — every tool call, every LLM response, every decision. Built for compliance, root-cause analysis, and shipping with confidence.",
     colSpan: "lg:col-span-3",
   },
 ];
@@ -58,112 +59,81 @@ const capabilities = [
 export const CapabilitiesSection = () => {
   return (
     <section id="capabilities" className="relative overflow-hidden bg-background py-24 md:py-40 scroll-mt-24">
-      {/* 1. Background Overlay: Subtle 1px Grid */}
-      <div className="absolute inset-0 pointer-events-none opacity-20 dark:opacity-20 opacity-5"
-        style={{
-          backgroundImage: `
-                    linear-gradient(currentColor 1px, transparent 1px),
-                    linear-gradient(90deg, currentColor 1px, transparent 1px)
-                 `,
-          backgroundSize: '40px 40px',
-          maskImage: 'radial-gradient(circle at center, black 40%, transparent 100%)',
-          color: 'var(--foreground)'
-        }}
+      <div className="absolute inset-0 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse 60% 40% at 50% 0%, hsl(var(--brand) / 0.04) 0%, transparent 70%)" }}
       />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
 
-        {/* 2. Section Header */}
+        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="max-w-2xl mx-auto text-center mb-24"
+          className="max-w-2xl mx-auto text-center mb-20"
         >
-          <span className="block font-mono text-[11px] font-bold tracking-[0.16em] text-muted-foreground/60 mb-6 uppercase">
-            &lt;System_Capabilities /&gt;
-          </span>
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-6">
-            Not features — <span className="text-muted-foreground/60">infrastructure.</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-muted mb-6">
+            <GitBranch className="w-3.5 h-3.5 text-brand" />
+            <span className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">Capabilities</span>
+          </div>
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-5">
+            Not features.{" "}
+            <span className="text-muted-foreground font-normal">Superpowers.</span>
           </h2>
-          <p className="text-xl text-muted-foreground/70 leading-relaxed font-light">
-            The primitives required to run autonomous agents in production.
+          <p className="text-lg text-muted-foreground leading-relaxed">
+            Every tool on this page existed to help you understand what happened.
+            AgentTrace is the first one that lets you{" "}
+            <strong className="text-foreground">change what happens next.</strong>
           </p>
         </motion.div>
 
-        {/* 3. Layout Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
-
+        {/* Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-6 gap-5">
           {capabilities.map((cap, i) => (
             <motion.div
-              key={cap.title}
+              key={cap.id}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: 0.1 * i, duration: 0.5 }}
-              className={`group relative z-10 ${cap.colSpan}`}
+              transition={{ delay: 0.07 * i }}
+              className={`group relative ${cap.colSpan}`}
             >
-              <div
-                className={`
-                    h-full relative overflow-hidden transition-all duration-300
-                    p-10 rounded-2xl
-                    bg-card border
-                    flex flex-col justify-between
-                    border-border
-                    ${cap.isCore
-                    ? 'hover:border-brand/50 hover:shadow-[0_0_40px_rgba(70,130,180,0.1)]'
-                    : 'hover:border-foreground/30'
-                  }
-                  `}
+              <div className={`h-full relative overflow-hidden transition-all duration-300 p-8 rounded-2xl bg-card border flex flex-col
+                ${cap.isCore
+                  ? "border-brand/25 hover:border-brand/50 hover:shadow-[0_0_40px_hsl(var(--brand)/0.08)]"
+                  : "border-border hover:border-foreground/20"
+                }`}
               >
-                {/* Core Glow Effect */}
                 {cap.isCore && (
-                  <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-brand/10 blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute top-0 right-0 w-[250px] h-[250px] bg-brand/8 blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
                 )}
 
-                {/* Scanline Hover Effect */}
-                <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-foreground/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-                {/* Content */}
-                <div>
-                  {/* Header */}
-                  <div className="flex justify-between items-start mb-8">
-                    <div className={`
-                            w-12 h-12 rounded-xl flex items-center justify-center 
-                            transition-colors duration-300
-                            ${cap.isCore ? 'bg-blue-950/40 text-brand' : 'bg-muted text-muted-foreground group-hover:bg-foreground group-hover:text-background'}
-                        `}>
-                      <cap.icon className="w-6 h-6" />
-                    </div>
-                    <span className="text-[10px] font-mono font-bold tracking-[0.2em] uppercase text-brand">
-                      {cap.label}
-                    </span>
+                {/* Top */}
+                <div className="flex justify-between items-start mb-7">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-300
+                    ${cap.isCore ? "bg-brand/10 text-brand" : "bg-muted text-muted-foreground group-hover:bg-foreground group-hover:text-background"}`}
+                  >
+                    <cap.icon className="w-5 h-5" />
                   </div>
-
-                  {/* Title */}
-                  <h3 className="text-2xl font-bold text-foreground mb-4">
-                    {cap.title}
-                  </h3>
+                  <span className={`text-[10px] font-mono font-bold tracking-[0.18em] uppercase ${cap.isCore ? "text-brand" : "text-muted-foreground/60"}`}>
+                    {cap.label}
+                  </span>
                 </div>
 
-                {/* Description */}
-                <div className="mt-4">
-                  <p className="text-base text-muted-foreground leading-relaxed group-hover:text-foreground/80 transition-colors">
-                    {cap.description}
-                  </p>
+                <h3 className="text-xl font-bold text-foreground mb-3">{cap.title}</h3>
 
-                  {/* Learn More / Arrow (Subtle) */}
-                  <div className="mt-8 pt-6 border-t border-border flex items-center gap-2 text-muted-foreground/50 group-hover:text-foreground transition-colors cursor-pointer">
-                    <span className="text-xs font-mono tracking-widest uppercase">Explore</span>
-                    <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
-                  </div>
+                <p className="text-sm text-muted-foreground leading-relaxed flex-1 group-hover:text-foreground/80 transition-colors">
+                  {cap.description}
+                </p>
+
+                <div className="mt-7 pt-5 border-t border-border flex items-center gap-2 text-muted-foreground/40 group-hover:text-foreground transition-colors cursor-pointer">
+                  <span className="text-xs font-mono tracking-widest uppercase">Explore</span>
+                  <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                 </div>
-
               </div>
             </motion.div>
           ))}
         </div>
-
       </div>
     </section>
   );
