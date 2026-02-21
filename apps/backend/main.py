@@ -393,7 +393,7 @@ ulimit -f 10000   # Limit max file size
                 "events_consumed": len(events),
                 "replay_fingerprint": replay_fingerprint,
                 "branch": branch_meta,
-                "new_events": new_events
+                "new_events": new_events if new_events else events
             }
             
         except subprocess.TimeoutExpired as e:
