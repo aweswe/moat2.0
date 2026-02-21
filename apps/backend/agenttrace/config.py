@@ -15,7 +15,7 @@ def _block_threading():
 
 class Config:
     api_key: str = None
-    api_url: str = "https://moat-kappa.vercel.app/api"  # Use env var or default
+    api_url: str = "https://theagenttrace.com/api"  # Use env var or default
     mode: str = "record"
     replay_events: list = []
     governance_level: str = "relaxed" # Options: "relaxed", "governance"

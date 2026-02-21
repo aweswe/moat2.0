@@ -11,7 +11,7 @@ import agenttrace
 
 # The user's API Key and URL
 os.environ["AGENTTRACE_API_KEY"] = "at_live_cf97bdcf909d78d3677916f8f4abac6e38e4dabcd520ccb9"
-os.environ["AGENTTRACE_API_URL"] = "https://agenttrace.vercel.app/api"
+os.environ["AGENTTRACE_API_URL"] = "https://theagenttrace.com/api"
 
 # Force development URL since we might be testing locally or against the real backend
 agenttrace.init()

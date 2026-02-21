@@ -13,7 +13,7 @@ class AgentTraceClient:
     def send_trace(trace_payload: Dict[str, Any]):
         """Fire and forget trace upload in a background thread."""
         api_key = Config.api_key or os.environ.get("AGENTTRACE_API_KEY")
-        api_url = Config.api_url or os.environ.get("AGENTTRACE_API_URL", "https://moat-kappa.vercel.app/api")
+        api_url = Config.api_url or os.environ.get("AGENTTRACE_API_URL", "https://theagenttrace.com/api")
         
         if not api_key:
             print("[AgentTrace] Warning: No API key found. Trace will not be uploaded.")
