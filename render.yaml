@@ -13,7 +13,7 @@ services:
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         sync: false
       - key: AGENTTRACE_API_URL
-        value: https://theagenttrace.com/api
+        value: https://www.theagenttrace.com/api
       - key: AGENTTRACE_API_KEY
         sync: false
     healthCheckPath: /health
