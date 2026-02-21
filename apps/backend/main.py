@@ -83,13 +83,14 @@ def download_events(client, trace_id: str) -> list:
     raise HTTPException(status_code=404, detail=f"No trace events found for trace {trace_id}")
 
 def omit_volatile_keys(event: dict) -> dict:
-    """Removes non-deterministic keys (timestamps, environment vars) before hashing."""
+    """Removes non-deterministic keys (timestamps, environment vars, argv) before hashing."""
     clean = {}
     for k, v in event.items():
         if k in ("timestamp", "timestamp_epoch"):
             continue
         if k == "payload" and isinstance(v, dict):
-            clean_payload = {pk: pv for pk, pv in v.items() if pk != "env"}
+            # Exclude environment and command-line arguments from causal fingerprint
+            clean_payload = {pk: pv for pk, pv in v.items() if pk not in ("env", "argv")}
             clean[k] = clean_payload
         else:
             clean[k] = v

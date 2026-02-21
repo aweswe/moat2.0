@@ -8,13 +8,14 @@ from .context import _trace_ctx, _step_ctx, _get_or_create_trace, _push_event, _
 from .client import AgentTraceClient
 
 def _omit_volatile_keys(event: dict) -> dict:
-    """Removes non-deterministic keys (timestamps, environment vars) before hashing."""
+    """Removes non-deterministic keys (timestamps, environment vars, argv) before hashing."""
     clean = {}
     for k, v in event.items():
         if k in ("timestamp", "timestamp_epoch"):
             continue
         if k == "payload" and isinstance(v, dict):
-            clean_payload = {pk: pv for pk, pv in v.items() if pk != "env"}
+            # Exclude environment and command-line arguments from causal fingerprint
+            clean_payload = {pk: pv for pk, pv in v.items() if pk not in ("env", "argv")}
             clean[k] = clean_payload
         else:
             clean[k] = v
