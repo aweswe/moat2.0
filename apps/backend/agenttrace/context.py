@@ -24,5 +24,6 @@ def _push_event(event: Dict[str, Any]):
         
     trace = _get_or_create_trace()
     with trace["lock"]:
+        event["seq"] = trace["event_count"]
         trace["events"].append(event)
         trace["event_count"] += 1
