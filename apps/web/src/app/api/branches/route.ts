@@ -74,7 +74,7 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
     try {
-        const { traceId, forkStep, overrideJson, name } = await req.json();
+        const { traceId, forkStep, overrideJson, overridePayload, name } = await req.json();
 
         if (!traceId || forkStep === undefined) {
             return NextResponse.json({ error: "traceId and forkStep are required" }, { status: 400 });
@@ -115,10 +115,11 @@ export async function POST(req: Request) {
         }
 
         let parsedOverride = null;
-        if (overrideJson && typeof overrideJson === "string") {
-            try { parsedOverride = JSON.parse(overrideJson); } catch (e) { }
-        } else if (overrideJson && typeof overrideJson === "object") {
-            parsedOverride = overrideJson;
+        const rawOverride = overridePayload ?? overrideJson;
+        if (rawOverride && typeof rawOverride === "string") {
+            try { parsedOverride = JSON.parse(rawOverride); } catch (e) { }
+        } else if (rawOverride && typeof rawOverride === "object") {
+            parsedOverride = rawOverride;
         }
 
         const enginePayload = {
