@@ -36,6 +36,14 @@ class AgentTraceClient:
             except Exception as e:
                 print(f"[AgentTrace] Upload error: {e}")
 
-        # Non-blocking background thread
-        thread = threading.Thread(target=_upload, daemon=True)
-        thread.start()
+        if Config.mode == "replay":
+            # 🛑 Replay mode is strictly read-only. We never emit new telemetry during simulation.
+            return
+
+        if Config.mode == "record":
+            # 🔒 Synchronous send. Keeps the execution strictly single-threaded.
+            _upload()
+        else:
+            # Non-blocking background thread
+            thread = threading.Thread(target=_upload, daemon=True)
+            thread.start()

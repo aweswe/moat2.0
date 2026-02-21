@@ -1,0 +1,22 @@
+=== STATUS ===
+True
+=== EXIT CODE ===
+0
+=== STDOUT ===
+[AgentTrace DEBUG] Events file path: 'C:\\Users\\adars\\AppData\\Local\\Temp\\tmpli0mqutz\\events.json'
+[AgentTrace DEBUG] File exists: True
+[AgentTrace DEBUG] Raw file (first 300): {"events": [{"id": "f61592b0-cb01-4690-ab11-d2bd0c105548", "trace_id": "8d77a8ba-fa77-41b4-8749-11f6a48a91e5", "seq": 0, "timestamp": "2026-02-20T18:05:14+00:00", "type": "agent_start", "payload": {"args": "()", "seed": 561922, "agent": "sandbox_test_agent"}, "created_at": "2026-02-20T18:05:26.34355
+[AgentTrace DEBUG] Loaded 3 replay events.
+
+1. Running in sandbox (REPLAY MODE)...
+[AgentTrace] Initializing Deterministic Replay Sandbox. Trace contains 3 events.
+--- Execution started inside sandbox ---
+Time is: 1700000000.0
+Random number is: 8
+[Sandbox] urllib.request intercepted: GET https://httpbin.org/get
+Network success, got 269 bytes
+--- Execution finished ---
+[AgentTrace] Replay complete. Output matched deterministic signature? Check your console. Trace size: 0 events.
+[AgentTrace] Tearing down Deterministic Sandbox/Recorder.
+
+=== STDERR ===

@@ -334,6 +334,7 @@ def execute_replay(req: ExecuteReplayRequest):
 
         sandbox_env = {
             "AGENTTRACE_MODE": "replay",
+            "AGENTTRACE_GOVERNANCE_LEVEL": "governance" if branch_name == "main" else "relaxed",
             "AGENTTRACE_REPLAY_EVENTS_FILE": events_file_path,
             "AGENTTRACE_REPLAY_OUTPUT_FILE": output_file_path,
             "PYTHONPATH": python_path # ensure bundled agenttrace SDK is visible
@@ -377,10 +378,29 @@ ulimit -f 10000   # Limit max file size
                      trace_data = json.load(f)
                      new_events = trace_data.get("events", [])
                      
-            # Compute replay fingerprint for determinism verification
+            # Compute semantic behavioral fingerprint
             import hashlib
+            # Normalize outputs to avoid false positives on whitespace
+            semantic_stdout = "\n".join([line.strip() for line in proc.stdout.splitlines() if line.strip()])
+            semantic_stderr = "\n".join([line.strip() for line in proc.stderr.splitlines() if line.strip()])
+            
+            # Find return value from the trace events
+            return_value = None
+            for evt in new_events:
+                if evt.get("type") == "agent_complete":
+                    return_value = evt.get("payload", {}).get("return_value")
+                    break
+
+            fingerprint_data = {
+                "events": [{k: v for k, v in e.items() if k != "timestamp"} for e in events],
+                "stdout": semantic_stdout,
+                "stderr": semantic_stderr,
+                "exit_code": proc.returncode,
+                "return_value": return_value
+            }
+            
             fingerprint_payload = json.dumps(
-                [{k: v for k, v in e.items() if k != "timestamp"} for e in events],
+                fingerprint_data,
                 sort_keys=True, separators=(",", ":")
             )
             replay_fingerprint = hashlib.sha256(fingerprint_payload.encode()).hexdigest()

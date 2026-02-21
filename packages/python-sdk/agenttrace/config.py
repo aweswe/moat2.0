@@ -18,15 +18,18 @@ class Config:
     api_url: str = "https://moat-kappa.vercel.app/api"  # Use env var or default
     mode: str = "record"
     replay_events: list = []
+    governance_level: str = "relaxed" # Options: "relaxed", "governance"
     
     @classmethod
-    def setup(cls, api_key: str = None, api_url: str = None, mode: str = "record", replay_events: list = None):
+    def setup(cls, api_key: str = None, api_url: str = None, mode: str = "record", replay_events: list = None, governance_level: str = None):
         cls.api_key = api_key or os.environ.get("AGENTTRACE_API_KEY")
         if api_url:
             cls.api_url = api_url
         elif os.environ.get("AGENTTRACE_API_URL"):
             cls.api_url = os.environ.get("AGENTTRACE_API_URL")
             
+        cls.governance_level = governance_level or os.environ.get("AGENTTRACE_GOVERNANCE_LEVEL") or "relaxed"
+
         if os.environ.get("AGENTTRACE_MODE"):
             cls.mode = os.environ.get("AGENTTRACE_MODE")
         else:
