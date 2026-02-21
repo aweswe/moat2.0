@@ -39,6 +39,8 @@ def run(name: Optional[str] = None):
                 import threading
 
                 # Early-bird Sandbox Init (Phase 7 Hardening)
+                # Auto-setup config from env vars in case user didn't explicitly call agenttrace.init()
+                Config.setup()
                 interceptor = DeterministicInterceptor(mode=Config.mode, replay_events=Config.replay_events)
                 interceptor.setup()
 
@@ -159,6 +161,8 @@ def run(name: Optional[str] = None):
                 import threading
                 
                 # Early-bird Sandbox Init (Phase 7 Hardening)
+                # Auto-setup config from env vars in case user didn't explicitly call agenttrace.init()
+                Config.setup()
                 interceptor = DeterministicInterceptor(mode=Config.mode, replay_events=Config.replay_events)
                 interceptor.setup()
 
