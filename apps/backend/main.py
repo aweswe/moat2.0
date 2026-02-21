@@ -82,6 +82,19 @@ def download_events(client, trace_id: str) -> list:
 
     raise HTTPException(status_code=404, detail=f"No trace events found for trace {trace_id}")
 
+def omit_volatile_keys(event: dict) -> dict:
+    """Removes non-deterministic keys (timestamps, environment vars) before hashing."""
+    clean = {}
+    for k, v in event.items():
+        if k in ("timestamp", "timestamp_epoch"):
+            continue
+        if k == "payload" and isinstance(v, dict):
+            clean_payload = {pk: pv for pk, pv in v.items() if pk != "env"}
+            clean[k] = clean_payload
+        else:
+            clean[k] = v
+    return clean
+
 def compute_hash(events: list, up_to_step: int) -> str:
     """SHA256 of events 0..up_to_step (deterministic, no timestamps)."""
     filtered = []
@@ -89,7 +102,7 @@ def compute_hash(events: list, up_to_step: int) -> str:
         seq = ev.get("seq", 0)
         if seq > up_to_step:
             break
-        clean = {k: v for k, v in ev.items() if k != "timestamp"} # Omit volatile timestamp
+        clean = omit_volatile_keys(ev)
         filtered.append(json.dumps(clean, sort_keys=True, separators=(",", ":")))
     content = "\n".join(filtered)
     return hashlib.sha256(content.encode()).hexdigest()
@@ -400,7 +413,7 @@ ulimit -f 10000   # Limit max file size
                     break
 
             fingerprint_data = {
-                "events": [{k: v for k, v in e.items() if k != "timestamp"} for e in events],
+                "events": [omit_volatile_keys(e) for e in events],
                 "stdout": semantic_stdout,
                 "stderr": semantic_stderr,
                 "exit_code": proc.returncode,

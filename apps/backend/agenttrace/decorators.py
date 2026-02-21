@@ -7,6 +7,19 @@ from typing import Any, Callable, Dict, Optional, ContextManager
 from .context import _trace_ctx, _step_ctx, _get_or_create_trace, _push_event, _get_active_step
 from .client import AgentTraceClient
 
+def _omit_volatile_keys(event: dict) -> dict:
+    """Removes non-deterministic keys (timestamps, environment vars) before hashing."""
+    clean = {}
+    for k, v in event.items():
+        if k in ("timestamp", "timestamp_epoch"):
+            continue
+        if k == "payload" and isinstance(v, dict):
+            clean_payload = {pk: pv for pk, pv in v.items() if pk != "env"}
+            clean[k] = clean_payload
+        else:
+            clean[k] = v
+    return clean
+
 def run(name: Optional[str] = None):
     """
     Decorator to wrap an agent's main execution loop.
@@ -140,7 +153,7 @@ def run(name: Optional[str] = None):
                         import hashlib, json as _json
                         events_consumed = len(Config.replay_events)
                         replay_payload = _json.dumps(
-                            [{k: v for k, v in e.items() if k != "timestamp"} for e in trace_data["events"]],
+                            [_omit_volatile_keys(e) for e in trace_data["events"]],
                             sort_keys=True, separators=(",", ":")
                         )
                         replay_hash = hashlib.sha256(replay_payload.encode()).hexdigest()[:16]
@@ -256,7 +269,7 @@ def run(name: Optional[str] = None):
                         import hashlib, json as _json
                         events_consumed = len(Config.replay_events)
                         replay_payload = _json.dumps(
-                            [{k: v for k, v in e.items() if k != "timestamp"} for e in trace_data["events"]],
+                            [_omit_volatile_keys(e) for e in trace_data["events"]],
                             sort_keys=True, separators=(",", ":")
                         )
                         replay_hash = hashlib.sha256(replay_payload.encode()).hexdigest()[:16]
