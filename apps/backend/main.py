@@ -41,6 +41,7 @@ class ReplayRequest(BaseModel):
 class ExecuteReplayRequest(BaseModel):
     trace_id: str
     branch_id: Optional[str] = None
+    governance_level: Optional[str] = None
 
 # --- Internal Helpers ported from branch_handler.py and replay_handler.py ---
 
@@ -332,9 +333,16 @@ def execute_replay(req: ExecuteReplayRequest):
         else:
             python_path = backend_dir
 
+        # Determine the governance level: 
+        # 1. User specified in request (High priority/Commercial toggle)
+        # 2. Default to auto-detect based on branch
+        effective_gov_level = req.governance_level
+        if not effective_gov_level:
+            effective_gov_level = "governance" if branch_name == "main" else "relaxed"
+
         sandbox_env = {
             "AGENTTRACE_MODE": "replay",
-            "AGENTTRACE_GOVERNANCE_LEVEL": "governance" if branch_name == "main" else "relaxed",
+            "AGENTTRACE_GOVERNANCE_LEVEL": effective_gov_level,
             "AGENTTRACE_REPLAY_EVENTS_FILE": events_file_path,
             "AGENTTRACE_REPLAY_OUTPUT_FILE": output_file_path,
             "PYTHONPATH": python_path # ensure bundled agenttrace SDK is visible

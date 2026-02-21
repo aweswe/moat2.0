@@ -16,7 +16,7 @@ const EXECUTION_ENGINE_URL = process.env.EXECUTION_ENGINE_URL || "http://127.0.0
  */
 export async function POST(req: Request) {
     try {
-        const { traceId, step, branch } = await req.json();
+        const { traceId, step, branch, governanceLevel } = await req.json();
 
         if (!traceId) {
             return NextResponse.json({ error: "traceId is required" }, { status: 400 });
@@ -66,6 +66,7 @@ export async function POST(req: Request) {
         // Call the deterministic execution sandbox
         const enginePayload: Record<string, any> = { trace_id: traceId };
         if (branch) enginePayload.branch_id = branch;
+        if (governanceLevel) enginePayload.governance_level = governanceLevel;
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 90_000);

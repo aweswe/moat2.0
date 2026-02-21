@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { GitBranch, GitMerge, Hash, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 
@@ -144,6 +146,7 @@ export function MultiverseView({ traceId, baseEvents, branch }: MultiverseViewPr
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [hashMatch, setHashMatch] = useState<boolean | null>(null);
+    const [isGovernance, setIsGovernance] = useState(false);
 
     useEffect(() => {
         if (!branch?.id) return;
@@ -160,7 +163,11 @@ export function MultiverseView({ traceId, baseEvents, branch }: MultiverseViewPr
                         "Content-Type": "application/json",
                         "Authorization": `Bearer ${session?.access_token || ""}`
                     },
-                    body: JSON.stringify({ traceId, branch: branch.id }),
+                    body: JSON.stringify({
+                        traceId,
+                        branch: branch.id,
+                        governanceLevel: isGovernance ? "governance" : "relaxed"
+                    }),
                 });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.details || data.error);
@@ -174,7 +181,7 @@ export function MultiverseView({ traceId, baseEvents, branch }: MultiverseViewPr
                 setLoading(false);
             }
         })();
-    }, [traceId, branch?.id]);
+    }, [traceId, branch?.id, isGovernance]);
 
     const diffRows = computeDiff(baseEvents, branchEvents, branch.forkStep);
     const divergedCount = diffRows.filter(r => r.diverged || r.newInBranch || r.missingInBranch).length;
@@ -219,6 +226,18 @@ export function MultiverseView({ traceId, baseEvents, branch }: MultiverseViewPr
                     {hashMatch === true && <span className="text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />hash_verified</span>}
                     {hashMatch === false && <span className="text-red-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />hash_drift_detected</span>}
                     <span>{branch.name ?? branch.id.slice(0, 12)}</span>
+                </div>
+
+                <div className="flex items-center gap-4 border-l border-border/50 pl-4">
+                    <div className="flex items-center space-x-2">
+                        <Label htmlFor="gov-mode" className="text-[10px] uppercase font-mono opacity-60">Governance Mode</Label>
+                        <Switch
+                            id="gov-mode"
+                            checked={isGovernance}
+                            onCheckedChange={setIsGovernance}
+                            className="scale-75"
+                        />
+                    </div>
                 </div>
             </div>
 
