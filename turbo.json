@@ -20,7 +20,10 @@
                 "WORKER_POLL_INTERVAL",
                 "AGENTTRACE_API_URL",
                 "AGENTTRACE_API_KEY",
-                "EXECUTION_ENGINE_URL"
+                "EXECUTION_ENGINE_URL",
+                "BREVO_API_KEY",
+                "BREVO_SMTP_LOGIN",
+                "NEXT_PUBLIC_APP_URL"
             ],
             "outputs": [
                 ".next/**",
