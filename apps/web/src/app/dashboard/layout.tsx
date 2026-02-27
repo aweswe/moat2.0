@@ -15,8 +15,11 @@ export default function DashboardLayout({
     const { user, loading } = useAuth();
     const router = useRouter();
 
-    // Sidebar collapse state — persisted in localStorage
+    // Sidebar collapse state (desktop) — persisted in localStorage
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    // Mobile sidebar state
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
     useEffect(() => {
         const saved = localStorage.getItem("agenttrace-sidebar-collapsed");
         if (saved === "true") setSidebarCollapsed(true);
@@ -38,11 +41,16 @@ export default function DashboardLayout({
 
     return (
         <BranchingProvider>
-            <div className="flex h-screen bg-background">
-                <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <DashboardHeader />
-                    <main className="flex-1 overflow-y-auto bg-background px-10 py-6">
+            <div className="flex h-[100dvh] bg-background overflow-hidden relative">
+                <Sidebar
+                    collapsed={sidebarCollapsed}
+                    onToggle={toggleSidebar}
+                    mobileOpen={mobileSidebarOpen}
+                    onMobileClose={() => setMobileSidebarOpen(false)}
+                />
+                <div className="flex-1 flex flex-col min-w-0">
+                    <DashboardHeader onMobileMenuToggle={() => setMobileSidebarOpen(true)} />
+                    <main className="flex-1 overflow-y-auto bg-background px-4 py-6 md:px-10">
                         {children}
                     </main>
                 </div>

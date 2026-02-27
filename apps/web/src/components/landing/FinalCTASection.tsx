@@ -2,59 +2,41 @@
 
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, GitBranch, BookOpen } from "lucide-react";
+import { ArrowRight, Terminal } from "lucide-react";
 import Link from "next/link";
 
 export const FinalCTASection = () => {
     return (
-        <section className="py-32 bg-background relative overflow-hidden border-t border-border">
-            {/* Background glow */}
+        <section className="py-32 sm:py-40 bg-background relative overflow-hidden flex flex-col items-center justify-center">
+            {/* Subtle radial glow */}
             <div className="absolute inset-0 pointer-events-none"
-                style={{ background: "radial-gradient(ellipse 60% 50% at 50% 100%, hsl(var(--brand) / 0.07) 0%, transparent 70%)" }}
+                style={{ background: "radial-gradient(ellipse 60% 60% at 50% 50%, hsl(var(--brand) / 0.05) 0%, transparent 60%)" }}
             />
 
-            <div className="container relative z-10">
-                <div className="max-w-4xl mx-auto text-center">
+            <div className="container relative z-10 px-4">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.6 }}
+                    className="max-w-3xl mx-auto text-center"
+                >
+                    <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground mb-6" style={{ lineHeight: 1.1 }}>
+                        Stop guessing.<br />
+                        <span className="text-muted-foreground font-semibold">Start debugging.</span>
+                    </h2>
 
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.6 }}
-                    >
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand/30 bg-brand/5 mb-8">
-                            <GitBranch className="w-3.5 h-3.5 text-brand" />
-                            <span className="text-xs font-semibold text-brand tracking-wide">Free to start · No credit card</span>
-                        </div>
+                    <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed mb-10 mx-auto max-w-2xl">
+                        AgentTrace takes 2 minutes to install. Stop digging through print logs and start seeing exactly what your AI is doing.
+                    </p>
 
-                        <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6" style={{ lineHeight: 1.08 }}>
-                            Your agent just crashed<br />
-                            in production.<br />
-                            <span className="text-gradient-brand">What if you could rewind it?</span>
-                        </h2>
-
-                        <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl mx-auto mb-10">
-                            Add <code className="text-sm font-mono bg-muted px-2 py-0.5 rounded border border-border">pip install agenttrace</code>,
-                            run your agent, and get a full execution record.
-                            Then fork it. Rewind it. Fix it. <strong className="text-foreground">Ship it.</strong>
-                        </p>
-                    </motion.div>
-
-                    {/* CTAs */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.5, delay: 0.15 }}
-                        className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10"
-                    >
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                         <Link href="/signup">
                             <Button
                                 size="lg"
-                                className="h-13 px-8 text-base font-bold rounded-xl group"
-                                style={{ boxShadow: "0 4px 28px hsl(var(--brand) / 0.3)" }}
+                                className="h-14 px-10 text-base font-semibold rounded-full shadow-lg shadow-brand/10 hover:shadow-xl hover:shadow-brand/20 transition-all group"
                             >
-                                Start Forking for Free
+                                Get Started for Free
                                 <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                             </Button>
                         </Link>
@@ -63,36 +45,14 @@ export const FinalCTASection = () => {
                             <Button
                                 variant="outline"
                                 size="lg"
-                                className="h-13 px-8 text-base font-medium rounded-xl"
+                                className="h-14 px-8 text-base font-medium rounded-full bg-transparent border-border/80 hover:bg-muted/50"
                             >
-                                <BookOpen className="mr-2 w-4 h-4" />
-                                5-minute quickstart
+                                <Terminal className="mr-2 w-4 h-4" />
+                                Read the docs
                             </Button>
                         </Link>
-                    </motion.div>
-
-                    {/* Social proof / trust */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        whileInView={{ opacity: 1 }}
-                        viewport={{ once: true }}
-                        transition={{ delay: 0.3 }}
-                        className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground"
-                    >
-                        {[
-                            "Works with any LLM",
-                            "Python + Node SDK",
-                            "Framework-agnostic",
-                            "RBAC for teams",
-                        ].map((item) => (
-                            <span key={item} className="flex items-center gap-1.5">
-                                <span className="w-1 h-1 rounded-full bg-brand/60" />
-                                {item}
-                            </span>
-                        ))}
-                    </motion.div>
-
-                </div>
+                    </div>
+                </motion.div>
             </div>
         </section>
     );

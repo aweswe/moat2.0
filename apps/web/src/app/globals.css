@@ -7,30 +7,31 @@
 @layer base {
   :root {
     /* ─── Light Mode ─────────────────────────────────── */
-    --background: 0 0% 98%;
-    --foreground: 220 20% 8%;
+    /* Kinso inspired: warmer off-white background, softer dark text */
+    --background: 30 20% 98%;
+    --foreground: 220 20% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 8%;
+    --card-foreground: 220 20% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 8%;
+    --popover-foreground: 220 20% 12%;
 
-    --panel: 0 0% 96%;
-    --panel-foreground: 220 20% 8%;
+    --panel: 30 15% 96%;
+    --panel-foreground: 220 20% 12%;
 
-    --primary: 220 20% 8%;
+    --primary: 220 20% 12%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 220 20% 8% / 0.12;
+    --primary-glow: 220 20% 12% / 0.08;
 
-    --secondary: 220 14% 93%;
-    --secondary-foreground: 220 20% 8%;
+    --secondary: 30 10% 92%;
+    --secondary-foreground: 220 20% 12%;
 
-    --muted: 220 14% 93%;
-    --muted-foreground: 220 10% 40%;
+    --muted: 30 10% 94%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 220 14% 90%;
-    --accent-foreground: 220 20% 8%;
+    --accent: 30 15% 90%;
+    --accent-foreground: 220 20% 12%;
 
     /* Brand – Steel Blue */
     --brand: 207 70% 45%;
