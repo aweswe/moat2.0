@@ -15,8 +15,10 @@ interface User {
 interface AuthContextType {
     user: User | null;
     loading: boolean;
-    signUp: (email: string, password: string, name: string) => Promise<{ error?: string }>;
+    signUp: (email: string, password: string, name: string) => Promise<{ error?: string; needsConfirmation?: boolean }>;
     signIn: (email: string, password: string) => Promise<{ error?: string }>;
+    signInWithGoogle: () => Promise<void>;
+    signInWithGitHub: () => Promise<void>;
     signOut: () => Promise<void>;
     hasPermission: (action: 'view_traces' | 'create_branch' | 'invite_member' | 'delete_trace') => boolean;
 }
@@ -79,6 +81,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const email = sbUser.email || '';
             console.log("[Auth] Setting up user:", email);
 
+            // Check if 2FA is enabled and not yet verified for this session
+            const twoFactorEnabled = sbUser.user_metadata?.two_factor_enabled;
+            const twoFactorVerifiedAt = sbUser.user_metadata?.two_factor_verified_at;
+
+            if (twoFactorEnabled) {
+                // Check if verified within the last 24 hours
+                const isVerified = twoFactorVerifiedAt &&
+                    (Date.now() - new Date(twoFactorVerifiedAt).getTime()) < 24 * 60 * 60 * 1000;
+
+                if (!isVerified) {
+                    console.log("[Auth] 2FA required, redirecting to /login/verify");
+                    // Don't fully set up the user yet — redirect to 2FA
+                    setLoading(false);
+                    router.push("/login/verify");
+                    return;
+                }
+            }
+
             // Call server-side API (uses service role key, bypasses RLS)
             const res = await fetch('/api/auth/setup', {
                 method: 'POST',
@@ -112,15 +132,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const signUp = async (email: string, password: string, name: string): Promise<{ error?: string }> => {
+    const signUp = async (email: string, password: string, name: string): Promise<{ error?: string; needsConfirmation?: boolean }> => {
         setLoading(true);
         processedUserIdRef.current = null; // Reset so mapSupabaseUser runs
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
                 data: { full_name: name },
+                emailRedirectTo: `${window.location.origin}/auth/callback`,
             },
         });
 
@@ -128,6 +149,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.error("[Auth] Signup error:", error.message);
             setLoading(false);
             return { error: error.message };
+        }
+
+        // If email confirmation is required, user won't have a session yet
+        if (data?.user && !data.session) {
+            setLoading(false);
+            return { needsConfirmation: true };
         }
 
         // onAuthStateChange will fire → mapSupabaseUser → /api/auth/setup creates org
@@ -162,6 +189,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push('/login');
     };
 
+    const signInWithGoogle = async () => {
+        await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/auth/callback`,
+            },
+        });
+    };
+
+    const signInWithGitHub = async () => {
+        await supabase.auth.signInWithOAuth({
+            provider: 'github',
+            options: {
+                redirectTo: `${window.location.origin}/auth/callback`,
+            },
+        });
+    };
+
     const hasPermission = (action: string): boolean => {
         if (!user) return false;
         if (user.role === 'owner') return true;
@@ -180,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, hasPermission }}>
+        <AuthContext.Provider value={{ user, loading, signUp, signIn, signInWithGoogle, signInWithGitHub, signOut, hasPermission }}>
             {children}
         </AuthContext.Provider>
     );

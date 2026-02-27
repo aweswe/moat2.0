@@ -139,6 +139,7 @@ export function useStats() {
 export function useTrace(traceId: string) {
     const [trace, setTrace] = React.useState<Trace | null>(null);
     const [metadata, setMetadata] = React.useState<any>(null);
+    const [audit, setAudit] = React.useState<any>(null);
     const [loading, setLoading] = React.useState(true);
     const { user } = useAuth();
 
@@ -163,9 +164,10 @@ export function useTrace(traceId: string) {
                     return;
                 }
 
-                const { trace: traceData, metadata: meta } = await res.json();
+                const { trace: traceData, metadata: meta, audit: auditData } = await res.json();
                 setTrace(traceData);
                 setMetadata(meta);
+                setAudit(auditData || null);
             } catch (err) {
                 console.error('[useTrace] Fetch failed:', err);
             } finally {
@@ -176,7 +178,7 @@ export function useTrace(traceId: string) {
         fetchTrace();
     }, [traceId, user]);
 
-    return { trace, metadata, loading };
+    return { trace, metadata, audit, loading };
 }
 
 export function useAFECandidates(jobId: string) {

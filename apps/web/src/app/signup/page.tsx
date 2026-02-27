@@ -1,15 +1,15 @@
 "use client";
 
 import * as React from 'react';
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Terminal, Shield, Zap, Mail, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff, Mail, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { AgentTraceLogo } from "@/components/ui/logo";
 
 export default function SignupPage() {
-    const { signUp, user } = useAuth();
+    const { signUp, signInWithGoogle, signInWithGitHub, user } = useAuth();
     const router = useRouter();
     const [name, setName] = React.useState("");
     const [email, setEmail] = React.useState("");
@@ -17,131 +17,206 @@ export default function SignupPage() {
     const [showPassword, setShowPassword] = React.useState(false);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [error, setError] = React.useState("");
-    const [success, setSuccess] = React.useState(false);
+    const [confirmationSent, setConfirmationSent] = React.useState(false);
 
-    // Redirect if already logged in
     React.useEffect(() => {
         if (user) router.push('/dashboard');
     }, [user, router]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!email || !password || !name) return;
-        if (password.length < 6) {
-            setError("Password must be at least 6 characters.");
-            return;
-        }
-
+        if (!name || !email || !password) return;
+        if (password.length < 9) { setError("Password must be at least 9 characters"); return; }
         setIsSubmitting(true);
         setError("");
-
         const result = await signUp(email, password, name);
-        if (result.error) {
-            setError(result.error);
-        } else {
-            setSuccess(true);
-        }
-        setIsSubmitting(false);
+        if (result.error) { setError(result.error); setIsSubmitting(false); }
+        else if (result.needsConfirmation) { setConfirmationSent(true); setIsSubmitting(false); }
     };
 
-    if (success) {
-        // Email confirmation is disabled — auth listener will set user → redirect to /dashboard
+    // ─── Confirmation Screen ─────────────────────────────
+    if (confirmationSent) {
         return (
-            <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-background to-background">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="w-full max-w-md text-center"
-                >
-                    <div className="bg-card border border-border rounded-2xl p-10 shadow-xl">
-                        <div className="w-16 h-16 rounded-xl bg-brand/10 border border-brand/30 flex items-center justify-center mx-auto mb-6">
-                            <Loader2 className="w-8 h-8 text-brand animate-spin" />
-                        </div>
-                        <h2 className="text-2xl font-bold tracking-tight mb-2">Setting Up Workspace</h2>
-                        <p className="text-muted-foreground text-sm">
-                            Creating your organization and redirecting...
-                        </p>
+            <div className="min-h-screen flex items-center justify-center p-6 bg-background">
+                <div className="w-full max-w-sm text-center">
+                    <div className="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-5">
+                        <Mail className="w-7 h-7 text-green-500" />
                     </div>
-                </motion.div>
+                    <h1 className="text-xl font-semibold tracking-tight mb-2">Check your email</h1>
+                    <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+                        We sent a verification link to<br />
+                        <strong className="text-foreground">{email}</strong>
+                    </p>
+                    <div className="p-4 rounded-lg bg-muted/30 border border-border text-sm text-muted-foreground mb-6">
+                        Click the link in your email to verify your account and get started.
+                    </div>
+                    <div className="space-y-3">
+                        <button
+                            onClick={async () => {
+                                setIsSubmitting(true);
+                                await signUp(email, password, name);
+                                setIsSubmitting(false);
+                            }}
+                            disabled={isSubmitting}
+                            className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                        >
+                            {isSubmitting ? "Resending..." : "Didn't receive it? Resend"}
+                        </button>
+                        <p className="text-xs text-muted-foreground/40">
+                            Also check your spam folder
+                        </p>
+                        <Link
+                            href="/login"
+                            className="block text-sm font-medium text-foreground hover:underline mt-4"
+                        >
+                            Back to Sign in
+                        </Link>
+                    </div>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-background to-background">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-md"
-            >
-                <div className="text-center mb-8">
-                    <Link href="/" className="inline-flex items-center gap-3 mb-8 group">
-                        <div className="w-10 h-10 rounded-sm bg-blue-950/30 border border-brand/30 flex items-center justify-center group-hover:border-brand/50 transition-colors">
-                            <div className="w-3 h-3 bg-brand rounded-sm shadow-[0_0_15px_rgba(70,130,180,0.5)]" />
+        <div className="min-h-screen flex">
+            {/* Left — Brand Panel */}
+            <div className="hidden lg:flex flex-col justify-between w-[55%] bg-[#0a0a0a] text-white p-12 relative overflow-hidden">
+                <div className="absolute inset-0 opacity-[0.03]" style={{
+                    backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+                    backgroundSize: '32px 32px',
+                }} />
+
+                <div className="relative z-10">
+                    <Link href="/" className="inline-flex items-center gap-2.5 mb-20">
+                        <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center">
+                            <AgentTraceLogo size={18} className="text-white" />
                         </div>
-                        <span className="font-bold text-xl tracking-tight text-foreground">
-                            AgentTrace
-                        </span>
+                        <span className="font-semibold text-lg tracking-tight">AgentTrace</span>
                     </Link>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2">Create Account</h1>
-                    <p className="text-muted-foreground">Start observing your AI agents with full determinism.</p>
+
+                    <h1 className="text-[42px] font-semibold leading-[1.1] tracking-tight max-w-md">
+                        The platform
+                        <br />
+                        for agent
+                        <br />
+                        engineering
+                    </h1>
+
+                    <p className="text-white/50 text-base mt-6 max-w-sm leading-relaxed">
+                        Trace, replay, and debug AI agent executions
+                        with deterministic precision.
+                    </p>
                 </div>
 
-                <div className="bg-card border border-border rounded-2xl p-8 shadow-xl">
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="relative z-10">
+                    <p className="text-[11px] uppercase tracking-[0.15em] text-white/30 font-semibold mb-5">
+                        Trusted by
+                    </p>
+                    <div className="flex items-center gap-8 text-white/40">
+                        <span className="text-[15px] font-semibold tracking-tight">12 engineers</span>
+                        <span className="text-white/10">|</span>
+                        <span className="text-[13px] text-white/30">Since February 2026</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Right — Signup Form */}
+            <div className="flex-1 flex items-center justify-center p-6 bg-background">
+                <div className="w-full max-w-[380px]">
+                    <div className="lg:hidden text-center mb-8">
+                        <Link href="/" className="inline-flex items-center gap-2">
+                            <div className="w-8 h-8 rounded bg-foreground/10 flex items-center justify-center">
+                                <AgentTraceLogo size={18} className="text-foreground" />
+                            </div>
+                            <span className="font-semibold text-lg tracking-tight">AgentTrace</span>
+                        </Link>
+                    </div>
+
+                    <h2 className="text-xl font-semibold tracking-tight text-center mb-1">Create Account</h2>
+
+                    {/* OAuth */}
+                    <div className="mt-6 mb-4">
+                        <p className="text-center text-xs text-muted-foreground mb-3">Sign up with</p>
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <button
+                                onClick={signInWithGoogle}
+                                className="flex items-center justify-center gap-2 h-11 rounded-md border border-border bg-background hover:bg-accent/50 text-sm font-medium transition-colors"
+                            >
+                                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                                </svg>
+                                Google
+                            </button>
+                            <button
+                                onClick={signInWithGitHub}
+                                className="flex items-center justify-center gap-2 h-11 rounded-md border border-border bg-background hover:bg-accent/50 text-sm font-medium transition-colors"
+                            >
+                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
+                                </svg>
+                                GitHub
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="relative my-5">
+                        <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-border" />
+                        </div>
+                        <div className="relative flex justify-center">
+                            <span className="bg-background px-3 text-xs text-muted-foreground">or continue with email</span>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-3.5">
                         {error && (
-                            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono">
+                            <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
                                 {error}
                             </div>
                         )}
 
-                        <div className="space-y-2">
-                            <label className="text-xs font-mono uppercase tracking-widest text-muted-foreground ml-1">Full Name</label>
-                            <div className="relative group">
-                                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-brand transition-colors" />
-                                <input
-                                    type="text"
-                                    required
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="Jane Doe"
-                                    className="w-full bg-background border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand/50 transition-all font-mono"
-                                />
-                            </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[13px] font-medium">Name</label>
+                            <input
+                                type="text"
+                                required
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Your name"
+                                className="w-full border border-border rounded-md px-3 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 transition-all placeholder:text-muted-foreground/50"
+                            />
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-xs font-mono uppercase tracking-widest text-muted-foreground ml-1">Email</label>
-                            <div className="relative group">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-brand transition-colors" />
-                                <input
-                                    type="email"
-                                    required
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="name@company.com"
-                                    className="w-full bg-background border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand/50 transition-all font-mono"
-                                />
-                            </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[13px] font-medium">Email</label>
+                            <input
+                                type="email"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="Your email address"
+                                className="w-full border border-border rounded-md px-3 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 transition-all placeholder:text-muted-foreground/50"
+                            />
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-xs font-mono uppercase tracking-widest text-muted-foreground ml-1">Password</label>
-                            <div className="relative group">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-brand transition-colors" />
+                        <div className="space-y-1.5">
+                            <label className="text-[13px] font-medium">Password</label>
+                            <div className="relative">
                                 <input
                                     type={showPassword ? "text" : "password"}
                                     required
-                                    minLength={6}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Min 6 characters"
-                                    className="w-full bg-background border border-border rounded-lg pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand/50 transition-all font-mono"
+                                    placeholder="At least 9 characters"
+                                    className="w-full border border-border rounded-md px-3 pr-10 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 transition-all placeholder:text-muted-foreground/50"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-foreground transition-colors"
                                 >
                                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                 </button>
@@ -150,44 +225,35 @@ export default function SignupPage() {
 
                         <Button
                             type="submit"
-                            disabled={isSubmitting || !email || !password || !name}
-                            className="w-full bg-foreground text-background hover:bg-foreground/90 font-bold tracking-wide h-11"
+                            disabled={isSubmitting || !name || !email || !password}
+                            className="w-full h-11 font-medium text-sm"
                         >
                             {isSubmitting ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Creating Account...
+                                    Creating account...
                                 </>
                             ) : (
-                                "Create Account"
+                                "Continue"
                             )}
                         </Button>
-
-                        <div className="text-center pt-2">
-                            <span className="text-muted-foreground text-xs">Already have an account? </span>
-                            <Link href="/login" className="text-brand text-xs font-semibold hover:underline">
-                                Sign in
-                            </Link>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-4 border-t border-border opacity-40">
-                            <Terminal className="w-3 h-3" />
-                            <span className="text-[10px] font-mono uppercase tracking-widest">Auth_Protocol: CREDENTIALS_V1</span>
-                        </div>
                     </form>
-                </div>
 
-                <div className="mt-8 flex justify-center gap-8 text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-brand" />
-                        <span className="text-xs font-medium">Deterministic</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-brand" />
-                        <span className="text-xs font-medium">Full_Control</span>
-                    </div>
+                    <p className="mt-4 text-center text-sm text-muted-foreground">
+                        Already have an account?{" "}
+                        <Link href="/login" className="text-foreground font-medium hover:underline">
+                            Sign in
+                        </Link>
+                    </p>
+
+                    <p className="mt-6 text-[10px] text-muted-foreground/50 text-center leading-relaxed">
+                        By continuing, you agree to our{" "}
+                        <Link href="/terms" className="underline hover:text-muted-foreground">Terms of Service</Link>
+                        {" "}and{" "}
+                        <Link href="/privacy" className="underline hover:text-muted-foreground">Privacy Policy</Link>.
+                    </p>
                 </div>
-            </motion.div>
+            </div>
         </div>
     );
 }

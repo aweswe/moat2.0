@@ -188,6 +188,42 @@ export default function SettingsPage() {
         }
     };
 
+    // ─── 2FA state ───────────────────────────────────────
+    const [twoFactorEnabled, setTwoFactorEnabled] = React.useState(false);
+    const [twoFactorToggling, setTwoFactorToggling] = React.useState(false);
+
+    // Fetch 2FA status from Supabase user metadata
+    React.useEffect(() => {
+        supabase.auth.getUser().then(({ data }: { data: any }) => {
+            if (data?.user?.user_metadata?.two_factor_enabled) {
+                setTwoFactorEnabled(true);
+            }
+        });
+    }, []);
+
+    const handleToggle2FA = async () => {
+        setTwoFactorToggling(true);
+        try {
+            const headers = await getAuthHeaders();
+            const res = await fetch('/api/auth/2fa/toggle', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ enabled: !twoFactorEnabled }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setTwoFactorEnabled(data.two_factor_enabled);
+                toast.success(data.two_factor_enabled ? "Two-factor authentication enabled." : "Two-factor authentication disabled.");
+            } else {
+                toast.error(data.error || "Failed to toggle 2FA");
+            }
+        } catch {
+            toast.error("Network error");
+        } finally {
+            setTwoFactorToggling(false);
+        }
+    };
+
     if (orgLoading) {
         return (
             <div className="p-24 flex flex-col items-center justify-center gap-4 opacity-40">
@@ -422,6 +458,31 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                             <div className="text-[9px] font-mono uppercase text-green-500 font-bold px-2 py-0.5 bg-green-500/10 rounded border border-green-500/20">Active</div>
+                        </div>
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/5">
+                            <div className="flex items-center gap-3">
+                                <Shield className="w-4 h-4 text-muted-foreground" />
+                                <div>
+                                    <div className="text-[10px] font-mono uppercase">Two-Factor Authentication</div>
+                                    <div className="text-[9px] text-muted-foreground/60 mt-0.5">Email OTP verification on login</div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {twoFactorEnabled ? (
+                                    <div className="text-[9px] font-mono uppercase text-green-500 font-bold px-2 py-0.5 bg-green-500/10 rounded border border-green-500/20">Active</div>
+                                ) : (
+                                    <div className="text-[9px] font-mono uppercase text-muted-foreground font-bold px-2 py-0.5 bg-muted/40 rounded border border-border">Inactive</div>
+                                )}
+                                <Button
+                                    size="sm"
+                                    variant={twoFactorEnabled ? "destructive" : "default"}
+                                    className="font-mono text-[9px] uppercase h-6 px-2"
+                                    onClick={handleToggle2FA}
+                                    disabled={twoFactorToggling}
+                                >
+                                    {twoFactorToggling ? <Loader2 className="w-3 h-3 animate-spin" /> : twoFactorEnabled ? "Disable" : "Enable"}
+                                </Button>
+                            </div>
                         </div>
                         <div className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/5">
                             <div className="flex items-center gap-3">

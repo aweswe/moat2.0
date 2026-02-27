@@ -100,7 +100,24 @@ export async function GET(
             // No script available — that's fine
         }
 
-        return NextResponse.json({ trace: traceData, metadata });
+        // 7. Resolve audit trail user info
+        const audit: Record<string, any> = {
+            updated_at: traceData.updated_at || null,
+        };
+
+        const userIds = [traceData.created_by, traceData.updated_by].filter(Boolean);
+        if (userIds.length > 0) {
+            const uniqueIds = [...new Set(userIds)];
+            const userMap: Record<string, string> = {};
+            for (const uid of uniqueIds) {
+                const { data: { user: u } } = await supabaseAdmin.auth.admin.getUserById(uid);
+                if (u) userMap[uid] = u.email || uid.slice(0, 8);
+            }
+            audit.created_by = traceData.created_by ? userMap[traceData.created_by] || null : null;
+            audit.updated_by = traceData.updated_by ? userMap[traceData.updated_by] || null : null;
+        }
+
+        return NextResponse.json({ trace: traceData, metadata, audit });
     } catch (err: any) {
         console.error("[API] /trace/[id] error:", err);
         return NextResponse.json({ error: err.message }, { status: 500 });

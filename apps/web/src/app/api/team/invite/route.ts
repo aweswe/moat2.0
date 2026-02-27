@@ -72,18 +72,52 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 5. Check for existing pending invite
+        // 5. Check for existing pending invite — resend email if found
         const { data: existingInvite } = await supabaseAdmin
             .from('invites')
-            .select('id')
+            .select('id, token_hash')
             .eq('org_id', membership.org_id)
-            .eq('email', email) // DB trigger ensures lowercase
+            .eq('email', email)
             .eq('status', 'pending')
             .limit(1)
             .single();
 
         if (existingInvite) {
-            return NextResponse.json({ error: "An invite is already pending for this email" }, { status: 409 });
+            // Resend email for existing invite
+            const baseUrl = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://theagenttrace.com';
+
+            // Generate a new token (old one stays valid too via hash)
+            const newToken = randomBytes(32).toString('hex');
+            const newTokenHash = createHash('sha256').update(newToken).digest('hex');
+
+            // Update the invite with a fresh token
+            await supabaseAdmin
+                .from('invites')
+                .update({ token_hash: newTokenHash })
+                .eq('id', existingInvite.id);
+
+            const inviteLink = `${baseUrl}/join?token=${newToken}`;
+
+            const { data: org } = await supabaseAdmin
+                .from('organizations')
+                .select('name')
+                .eq('id', membership.org_id)
+                .single();
+
+            const emailResult = await sendInviteEmail({
+                to: email,
+                orgName: org?.name || 'AgentTrace Workspace',
+                role,
+                inviteLink,
+                inviterName: user.user_metadata?.full_name || user.email?.split('@')[0],
+            });
+
+            return NextResponse.json({
+                success: true,
+                inviteLink,
+                emailSent: emailResult.success,
+                resent: true,
+            });
         }
 
         // 6. Generate secure token
@@ -107,7 +141,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 8. Build invite link
-        const baseUrl = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const baseUrl = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://theagenttrace.com';
         const inviteLink = `${baseUrl}/join?token=${token}`;
 
         // 9. Send email via Brevo (best-effort, non-blocking)

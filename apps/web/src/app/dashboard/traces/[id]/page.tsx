@@ -37,9 +37,12 @@ import {
     Check,
     TerminalSquare,
     ShieldCheck,
-    GitFork
+    GitFork,
+    Pencil,
+    Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { BranchPicker } from "@/components/trace/BranchPicker";
 import { TraceEventRow } from "@/components/trace/TraceEventRow";
@@ -59,7 +62,7 @@ function TraceDetailInner() {
     const params = useParams();
     const { user, hasPermission } = useAuth();
     const traceId = params.id as string;
-    const { trace, metadata, loading: traceLoading } = useTrace(traceId);
+    const { trace, metadata, audit, loading: traceLoading } = useTrace(traceId);
 
     const { branches, activeBranchId, refreshBranches, createBranch, isLoading } = useBranching();
     const canBranch = hasPermission('create_branch');
@@ -74,6 +77,52 @@ function TraceDetailInner() {
     const [activeDiffBranch, setActiveDiffBranch] = React.useState<any>(null);
     const [showScript, setShowScript] = React.useState(false);
     const [cliCopied, setCliCopied] = React.useState(false);
+
+    // Inline rename state
+    const [isEditing, setIsEditing] = React.useState(false);
+    const [editTitle, setEditTitle] = React.useState("");
+    const [saving, setSaving] = React.useState(false);
+
+    const handleSaveTitle = async () => {
+        if (!editTitle.trim() || saving) return;
+        setSaving(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch(`/api/trace/${traceId}/rename`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${session?.access_token || ""}`,
+                },
+                body: JSON.stringify({ title: editTitle.trim() }),
+            });
+            if (res.ok) {
+                setIsEditing(false);
+                // Force a soft refresh of the page to show new title
+                window.location.reload();
+            }
+        } catch (e) {
+            console.error("Rename failed:", e);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleTrash = async () => {
+        if (!confirm("Move this trace to trash? You can restore it later.")) return;
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch(`/api/trace/${traceId}/trash`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${session?.access_token || ""}` },
+            });
+            if (res.ok) {
+                window.location.href = "/dashboard/traces";
+            }
+        } catch (e) {
+            console.error("Trash failed:", e);
+        }
+    };
 
     // Forking state
     const [isForkDialogOpen, setIsForkDialogOpen] = React.useState(false);
@@ -127,7 +176,7 @@ function TraceDetailInner() {
     if (traceLoading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
-                <div className="font-mono text-xs animate-pulse">INITIATING_SYSTEM_HYDRATION...</div>
+                <div className="font-mono text-xs animate-pulse">Loading trace...</div>
             </div>
         );
     }
@@ -136,10 +185,10 @@ function TraceDetailInner() {
         return (
             <div className="p-8 text-center border-2 border-dashed border-border rounded-2xl opacity-50">
                 <AlertCircle className="w-8 h-8 mx-auto mb-4 text-red-500" />
-                <h2 className="text-xl font-bold opacity-80">TRACE_NOT_FOUND</h2>
+                <h2 className="text-xl font-bold opacity-80">Trace Not Found</h2>
                 <p className="text-xs font-mono mt-2">The requested ID does not exist in the current organization space.</p>
                 <Button variant="outline" className="mt-6 font-mono text-[10px]" onClick={() => window.history.back()}>
-                    RETURN_TO_BASE &larr;
+                    &larr; Go Back
                 </Button>
             </div>
         );
@@ -155,7 +204,36 @@ function TraceDetailInner() {
                     </Button>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold tracking-tight">{trace.title || "Untitled_Trace"}</h1>
+                            {isEditing ? (
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        value={editTitle}
+                                        onChange={(e) => setEditTitle(e.target.value)}
+                                        className="h-8 text-lg font-bold w-64"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleSaveTitle();
+                                            if (e.key === "Escape") setIsEditing(false);
+                                        }}
+                                    />
+                                    <Button size="sm" onClick={handleSaveTitle} disabled={saving}>
+                                        {saving ? "Saving..." : "Save"}
+                                    </Button>
+                                    <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
+                                </div>
+                            ) : (
+                                <h1
+                                    className="text-2xl font-bold tracking-tight cursor-pointer hover:text-brand transition-colors group/title flex items-center gap-2"
+                                    onClick={() => {
+                                        setEditTitle(trace.title || "Untitled Trace");
+                                        setIsEditing(true);
+                                    }}
+                                    title="Click to rename"
+                                >
+                                    {trace.title || "Untitled Trace"}
+                                    <Pencil className="w-3.5 h-3.5 opacity-0 group-hover/title:opacity-40 transition-opacity" />
+                                </h1>
+                            )}
                             <div className={cn(
                                 "px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-brand/10 text-brand border border-brand/20",
                                 trace.status === 'failed' && "bg-red-500/10 text-red-500 border-red-500/20"
@@ -292,6 +370,15 @@ function TraceDetailInner() {
                             <Cpu className="w-3 h-3 mr-2" />
                         )}
                         {isReplaying ? "RUNNING..." : activeBranchId ? "RUN_BRANCH" : "RUN_SANDBOX"}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-mono text-[10px] border-red-500/20 text-red-400 hover:bg-red-500/5"
+                        onClick={handleTrash}
+                    >
+                        <Trash2 className="w-3 h-3 mr-2" />
+                        TRASH
                     </Button>
 
                 </div>
@@ -466,6 +553,24 @@ function TraceDetailInner() {
                                 <div className="flex justify-between">
                                     <span className="text-muted-foreground uppercase">Script</span>
                                     <span className="text-xs opacity-60 truncate max-w-[120px]" title={metadata.script_path}>{metadata.script_path.split(/[\/\\]/).pop()}</span>
+                                </div>
+                            )}
+                            {audit?.created_by && (
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground uppercase">Created By</span>
+                                    <span className="text-brand truncate max-w-[140px]" title={audit.created_by}>{audit.created_by}</span>
+                                </div>
+                            )}
+                            {audit?.updated_by && (
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground uppercase">Last Modified</span>
+                                    <span className="text-yellow-400 truncate max-w-[140px]" title={audit.updated_by}>{audit.updated_by}</span>
+                                </div>
+                            )}
+                            {audit?.updated_at && (
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground uppercase">Modified At</span>
+                                    <span className="opacity-60">{new Date(audit.updated_at).toLocaleString()}</span>
                                 </div>
                             )}
                         </CardContent>

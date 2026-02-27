@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { ModeToggle } from "@/components/landing/mode-toggle";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { AgentTraceLogo } from "@/components/ui/logo";
 
 export const Header = () => {
   const pathname = usePathname();
@@ -35,8 +36,8 @@ export const Header = () => {
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-sm bg-blue-950/30 border border-brand/30 flex items-center justify-center">
-              <div className="w-2.5 h-2.5 bg-brand rounded-sm shadow-[0_0_10px_rgba(70,130,180,0.5)]" />
+            <div className="w-8 h-8 rounded-sm bg-foreground/5 border border-foreground/10 flex items-center justify-center">
+              <AgentTraceLogo size={18} className="text-foreground" />
             </div>
             <span className="font-semibold text-lg tracking-tight text-foreground">
               AgentTrace
@@ -97,8 +98,8 @@ export const Header = () => {
                 <SheetContent side="right" className="w-[80vw] sm:w-[350px]">
                   <div className="flex flex-col gap-8 mt-8">
                     <Link href="/" className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-sm bg-blue-950/30 border border-brand/30 flex items-center justify-center">
-                        <div className="w-2.5 h-2.5 bg-brand rounded-sm shadow-[0_0_10px_rgba(70,130,180,0.5)]" />
+                      <div className="w-8 h-8 rounded-sm bg-foreground/5 border border-foreground/10 flex items-center justify-center">
+                        <AgentTraceLogo size={18} className="text-foreground" />
                       </div>
                       <span className="font-semibold text-lg tracking-tight text-foreground">
                         AgentTrace
