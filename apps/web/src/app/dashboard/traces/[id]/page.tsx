@@ -75,6 +75,7 @@ function TraceDetailInner() {
     const [isReplaying, setIsReplaying] = React.useState(false);
     const [replayState, setReplayState] = React.useState<any>(null);
     const [showReplayPanel, setShowReplayPanel] = React.useState(false);
+    const [replayViewMode, setReplayViewMode] = React.useState<'simple' | 'dev'>('simple');
     const [activeDiffBranch, setActiveDiffBranch] = React.useState<any>(null);
     const [showScript, setShowScript] = React.useState(false);
     const [cliCopied, setCliCopied] = React.useState(false);
@@ -770,48 +771,108 @@ function TraceDetailInner() {
                 </div>
             </div>
 
-            {/* Multiline/Popup Views Overlay (Top Layer) */}
-            <div className="absolute top-20 right-8 w-1/3 z-40 max-w-sm flex flex-col gap-4 pointer-events-none">
-                {/* Replay State Panel */}
-                {showReplayPanel && replayState && (
-                    <div className="pointer-events-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0e0e11] shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300">
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-[#111113]">
-                            <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-300 flex items-center gap-2">
-                                <Cpu className="w-3.5 h-3.5 text-zinc-500" />
-                                {replayState.branch ? `Branch Replay — ${replayState.branch.name ?? replayState.branch.branch_id?.slice(0, 8)}` : "Sandbox Replay"}
-                            </span>
-                            <div className="flex items-center gap-3">
-                                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${replayState.exitCode === 0 ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-500' : 'bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-500'}`}>
-                                    {replayState.exitCode === 0 ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                                    {replayState.exitCode === 0 ? 'Pass' : `Exit ${replayState.exitCode}`}
-                                </div>
-                                <button onClick={() => setShowReplayPanel(false)} className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors">
-                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3L3 9M3 3L9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            {/* Replay Results Panel — Full-width inline, above scrubber */}
+            {showReplayPanel && replayState && (
+                <div className="flex-none border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-[#111113] animate-in slide-in-from-bottom-4 duration-300 z-20">
+                    {/* Panel Header with Mode Toggle */}
+                    <div className="flex items-center justify-between px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800">
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                                <Cpu className="w-4 h-4 text-zinc-500" />
+                                <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                                    {replayState.branch ? `Branch Replay — ${replayState.branch.name ?? replayState.branch.branch_id?.slice(0, 8)}` : "Sandbox Replay"}
+                                </span>
+                            </div>
+                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${replayState.exitCode === 0 ? 'bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400'}`}>
+                                {replayState.exitCode === 0 ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                                {replayState.exitCode === 0 ? 'Passed' : `Failed (Exit ${replayState.exitCode})`}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {/* Dev / Simple Toggle */}
+                            <div className="flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-lg p-0.5">
+                                <button
+                                    onClick={() => setReplayViewMode('simple')}
+                                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${replayViewMode === 'simple' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                                >
+                                    Summary
+                                </button>
+                                <button
+                                    onClick={() => setReplayViewMode('dev')}
+                                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${replayViewMode === 'dev' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                                >
+                                    Dev Details
                                 </button>
                             </div>
-                        </div>
-
-                        {/* Internal State */}
-                        <div className="p-4 space-y-4">
-                            <div className="flex items-center gap-4 text-xs">
-                                <div><span className="text-zinc-500">Events:</span> <span className="text-zinc-800 dark:text-zinc-300 font-medium ml-1">{replayState.eventsConsumed ?? 0}</span></div>
-                                <div><span className="text-zinc-500">Hash:</span> <span className="text-zinc-800 dark:text-zinc-300 font-mono ml-1">{replayState.replayFingerprint?.slice(0, 8) ?? '—'}</span></div>
-                            </div>
-                            {replayState.stdout && (
-                                <pre className="text-xs font-mono text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-[#14151a] border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 max-h-[200px] overflow-auto whitespace-pre-wrap leading-relaxed">
-                                    {replayState.stdout.split('\n').filter((l: string) => l.trim()).join('\n')}
-                                </pre>
-                            )}
-                            {replayState.stderr && (
-                                <pre className="text-xs font-mono text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-lg p-3 max-h-[150px] overflow-auto whitespace-pre-wrap">
-                                    {replayState.stderr}
-                                </pre>
-                            )}
+                            <button onClick={() => setShowReplayPanel(false)} className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
+                                <svg width="14" height="14" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3L3 9M3 3L9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
                         </div>
                     </div>
-                )}
 
+                    {/* Simple View — Clean summary */}
+                    {replayViewMode === 'simple' && (
+                        <div className="px-6 py-4 flex items-start gap-6">
+                            <div className="flex-1">
+                                <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                                    {replayState.exitCode === 0 ? (
+                                        <>
+                                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">Agent completed successfully.</span>{' '}
+                                            Consumed {replayState.eventsConsumed ?? 0} events and produced a deterministic output. The replay fingerprint matched the original execution.
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="font-semibold text-red-600 dark:text-red-400">Agent execution failed</span> with exit code {replayState.exitCode}.{' '}
+                                            {replayState.stderr ? `Error: ${replayState.stderr.split('\n')[0]?.slice(0, 120)}` : 'Check the Dev Details for full stack trace.'}
+                                        </>
+                                    )}
+                                </p>
+                                {replayState.stdout && (
+                                    <p className="text-xs text-zinc-500 mt-2 line-clamp-2">
+                                        Output: {replayState.stdout.split('\n').filter((l: string) => l.trim()).slice(0, 2).join(' | ')}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-4 text-xs text-zinc-500 shrink-0 pt-0.5">
+                                <div><span className="font-medium">Events:</span> {replayState.eventsConsumed ?? 0}</div>
+                                <div className="font-mono">{replayState.replayFingerprint?.slice(0, 8) ?? '—'}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Dev View — Full details */}
+                    {replayViewMode === 'dev' && (
+                        <div className="px-6 py-4 space-y-3">
+                            <div className="flex items-center gap-6 text-xs">
+                                <div className="flex items-center gap-4">
+                                    <div><span className="text-zinc-500">Events Consumed:</span> <span className="text-zinc-800 dark:text-zinc-200 font-semibold ml-1">{replayState.eventsConsumed ?? 0}</span></div>
+                                    <div><span className="text-zinc-500">Exit Code:</span> <span className={`font-semibold ml-1 ${replayState.exitCode === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{replayState.exitCode}</span></div>
+                                    <div><span className="text-zinc-500">Fingerprint:</span> <span className="text-zinc-800 dark:text-zinc-200 font-mono font-medium ml-1">{replayState.replayFingerprint ?? '—'}</span></div>
+                                </div>
+                            </div>
+                            {replayState.stdout && (
+                                <div className="space-y-1">
+                                    <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Standard Output</div>
+                                    <pre className="text-xs font-mono text-zinc-600 dark:text-zinc-400 bg-white dark:bg-[#0e0e11] border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 max-h-[180px] overflow-auto whitespace-pre-wrap leading-relaxed">
+                                        {replayState.stdout.split('\n').filter((l: string) => l.trim()).join('\n')}
+                                    </pre>
+                                </div>
+                            )}
+                            {replayState.stderr && (
+                                <div className="space-y-1">
+                                    <div className="text-[10px] font-semibold text-red-500 uppercase tracking-wider">Standard Error</div>
+                                    <pre className="text-xs font-mono text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-lg p-3 max-h-[120px] overflow-auto whitespace-pre-wrap">
+                                        {replayState.stderr}
+                                    </pre>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Overlay Views */}
+            <div className="absolute top-20 right-8 w-1/3 z-40 max-w-sm flex flex-col gap-4 pointer-events-none">
                 {/* Multiverse Diff View */}
                 {activeDiffBranch && (
                     <div className="pointer-events-auto shadow-2xl animate-in slide-in-from-right-8 duration-300 bg-white dark:bg-[#0e0e11] rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
@@ -848,9 +909,6 @@ function TraceDetailInner() {
                     </div>
                 </div>
             )}
-
-            {/* Central Fork Dialog (Keeping for now, but restyled) */}
-            {/* Removed in favor of inline Sandbox mode */}
         </div>
     );
 }
