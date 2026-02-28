@@ -50,6 +50,7 @@ import { MultiverseView } from "@/components/trace/MultiverseView";
 import { BranchingProvider, useBranching } from "@/components/trace/BranchingProvider";
 import ScriptViewer from "@/components/trace/ScriptViewer";
 import { useRealtime } from "@/hooks/use-realtime";
+import { ModeToggle } from "@/components/landing/mode-toggle";
 
 interface TraceEvent {
     timestamp: string;
@@ -169,25 +170,79 @@ function TraceDetailInner() {
 
     React.useEffect(() => {
         if (events.length > 0 && !selectedEvent) {
-            setSelectedEvent(events[0]);
+            // Find first error event for "2-Second Ah-Ha"
+            const firstErrorIdx = events.findIndex((e: any) => e.type === 'error' || e.payload?.status === 'error');
+            const targetIdx = firstErrorIdx !== -1 ? firstErrorIdx : 0;
+
+            setSelectedEvent(events[targetIdx]);
+            setSliderValue(Math.floor((targetIdx / Math.max(events.length - 1, 1)) * 100));
+
+            // Auto-scroll to the error event
+            setTimeout(() => {
+                const rowId = `event-row-${targetIdx}`;
+                const el = document.getElementById(rowId);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
         }
     }, [events, selectedEvent]);
 
+    // Keyboard Navigation (VIM style)
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Don't hijack keystrokes if they are typing in an input
+            if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) || isEditing || isForkDialogOpen) return;
+
+            if (e.key === 'j' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                const currIdx = events.findIndex((ev: any) => ev === selectedEvent);
+                if (currIdx < events.length - 1) {
+                    const nextEv = events[currIdx + 1];
+                    setSelectedEvent(nextEv);
+                    setSliderValue(Math.floor(((currIdx + 1) / Math.max(events.length - 1, 1)) * 100));
+                    document.getElementById(`event-row-${currIdx + 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            } else if (e.key === 'k' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const currIdx = events.findIndex((ev: any) => ev === selectedEvent);
+                if (currIdx > 0) {
+                    const prevEv = events[currIdx - 1];
+                    setSelectedEvent(prevEv);
+                    setSliderValue(Math.floor(((currIdx - 1) / Math.max(events.length - 1, 1)) * 100));
+                    document.getElementById(`event-row-${currIdx - 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            } else if (e.key === 'f') {
+                e.preventDefault();
+                if (canBranch && selectedEvent && !isForkDialogOpen) {
+                    setForkTargetEvent(selectedEvent);
+                    setIsForkDialogOpen(true);
+                } else if (isForkDialogOpen) {
+                    setIsForkDialogOpen(false);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [events, selectedEvent, isEditing, isForkDialogOpen, canBranch]);
+
     if (traceLoading) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <div className="font-mono text-xs animate-pulse">Loading trace...</div>
+            <div className="flex items-center justify-center min-h-[100dvh] bg-zinc-50 dark:bg-[#0e0e11] text-zinc-700 dark:text-zinc-300">
+                <div className="text-sm font-medium animate-pulse flex items-center gap-3">
+                    <History className="w-5 h-5 animate-spin text-zinc-400 dark:text-zinc-500" />
+                    Loading trace timeline...
+                </div>
             </div>
         );
     }
 
     if (!trace) {
         return (
-            <div className="p-8 text-center border-2 border-dashed border-border rounded-2xl opacity-50">
-                <AlertCircle className="w-8 h-8 mx-auto mb-4 text-red-500" />
-                <h2 className="text-xl font-bold opacity-80">Trace Not Found</h2>
-                <p className="text-xs font-mono mt-2">The requested ID does not exist in the current organization space.</p>
-                <Button variant="outline" className="mt-6 font-mono text-[10px]" onClick={() => window.history.back()}>
+            <div className="p-8 mt-12 text-center border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl max-w-md mx-auto">
+                <AlertCircle className="w-8 h-8 mx-auto mb-4 text-zinc-400 dark:text-zinc-500" />
+                <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-300">Trace Not Found</h2>
+                <p className="text-sm text-zinc-500 mt-2">The requested ID does not exist in the current organization space.</p>
+                <Button variant="outline" className="mt-6 text-xs text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={() => window.history.back()}>
                     &larr; Go Back
                 </Button>
             </div>
@@ -195,12 +250,12 @@ function TraceDetailInner() {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="absolute inset-0 z-50 bg-zinc-50 dark:bg-[#0e0e11] text-zinc-800 dark:text-zinc-300 flex flex-col overflow-hidden font-sans animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex-none flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0e0e11]">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => window.history.back()} className="rounded-full hover:bg-white/5">
-                        <ArrowLeft className="w-5 h-5" />
+                    <Button variant="ghost" size="icon" onClick={() => window.history.back()} className="rounded-full hover:bg-zinc-100 dark:hover:bg-white/5">
+                        <ArrowLeft className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
                     </Button>
                     <div>
                         <div className="flex items-center gap-2">
@@ -223,7 +278,7 @@ function TraceDetailInner() {
                                 </div>
                             ) : (
                                 <h1
-                                    className="text-2xl font-bold tracking-tight cursor-pointer hover:text-brand transition-colors group/title flex items-center gap-2"
+                                    className="text-lg font-semibold tracking-tight cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors group/title flex items-center gap-2"
                                     onClick={() => {
                                         setEditTitle(trace.title || "Untitled Trace");
                                         setIsEditing(true);
@@ -231,24 +286,24 @@ function TraceDetailInner() {
                                     title="Click to rename"
                                 >
                                     {trace.title || "Untitled Trace"}
-                                    <Pencil className="w-3.5 h-3.5 opacity-0 group-hover/title:opacity-40 transition-opacity" />
+                                    <Pencil className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600 opacity-0 group-hover/title:opacity-100 transition-opacity" />
                                 </h1>
                             )}
                             <div className={cn(
-                                "px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-brand/10 text-brand border border-brand/20",
-                                trace.status === 'failed' && "bg-red-500/10 text-red-500 border-red-500/20"
+                                "px-2 py-0.5 rounded-full text-[10px] font-medium uppercase bg-zinc-100 dark:bg-zinc-800/50 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800",
+                                trace.status === 'failed' && "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-500 border-red-200 dark:border-red-500/20"
                             )}>
                                 {trace.status}
                             </div>
                             {(trace.status === 'completed' || trace.status === 'ready') && (
-                                <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/5 border border-green-500/20">
-                                    <ShieldCheck className="w-3 h-3 text-green-500" />
-                                    <span className="text-[8px] font-mono text-green-500 uppercase font-bold">Verified</span>
+                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                                    <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                                    <span className="text-[10px] font-medium text-emerald-500">Verified</span>
                                 </div>
                             )}
                             <BranchPicker traceId={traceId} />
                         </div>
-                        <p className="text-muted-foreground text-xs font-mono opacity-60 mt-1">UUID: {traceId} // {new Date(trace.created_at).toLocaleString()}</p>
+                        <p className="text-zinc-500 text-xs mt-1 font-mono">{traceId} <span className="text-zinc-700 mx-2">•</span> <span className="font-sans">{new Date(trace.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span></p>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -257,26 +312,27 @@ function TraceDetailInner() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                className="font-mono text-[10px] border-brand/20 text-brand hover:bg-brand/5"
+                                className="text-xs border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
                             >
-                                <Terminal className="w-3 h-3 mr-2" /> RAW_JSON
+                                <Terminal className="w-3.5 h-3.5 mr-2" /> JSON
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-[1000px] h-[80vh] flex flex-col">
+                        <DialogContent className="sm:max-w-[1000px] h-[80vh] flex flex-col bg-white dark:bg-[#0e0e11] border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100">
                             <DialogHeader>
                                 <DialogTitle>Raw Trace Events</DialogTitle>
-                                <DialogDescription>
+                                <DialogDescription className="text-zinc-500 dark:text-zinc-400">
                                     Technical data stream for trace {traceId}.
                                 </DialogDescription>
                             </DialogHeader>
-                            <div className="flex-1 bg-black/40 p-4 rounded-lg border border-white/10 overflow-auto font-mono text-[10px]">
-                                <pre className="text-brand">
+                            <div className="flex-1 bg-zinc-50 dark:bg-[#14151a] p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-auto font-mono text-[10px]">
+                                <pre className="text-zinc-600 dark:text-zinc-300">
                                     {JSON.stringify(events, null, 2)}
                                 </pre>
                             </div>
                             <DialogFooter>
                                 <Button
                                     variant="outline"
+                                    className="border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                                     onClick={() => {
                                         const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
                                         const url = URL.createObjectURL(blob);
@@ -297,24 +353,25 @@ function TraceDetailInner() {
                     <Button
                         variant="outline"
                         size="sm"
-                        className="font-mono text-[10px] border-brand/20 text-brand hover:bg-brand/5"
+                        className="text-xs border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
                         onClick={() => setShowScript(!showScript)}
                     >
-                        <FileCode2 className="w-3 h-3 mr-2" />
-                        {showScript ? "HIDE_SOURCE" : "SOURCE_CODE"}
+                        <FileCode2 className="w-3.5 h-3.5 mr-2" />
+                        {showScript ? "Hide Source" : "Source Code"}
                     </Button>
                     <Button
                         variant="outline"
                         size="sm"
-                        className="font-mono text-[10px] border-green-500/20 text-green-500 hover:bg-green-500/5"
+                        className="text-xs border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                         onClick={copyCliCommand}
                     >
-                        {cliCopied ? <Check className="w-3 h-3 mr-2" /> : <TerminalSquare className="w-3 h-3 mr-2" />}
-                        {cliCopied ? "COPIED!" : "RE-RUN_LOCAL"}
+                        {cliCopied ? <Check className="w-3.5 h-3.5 mr-2" /> : <TerminalSquare className="w-3.5 h-3.5 mr-2" />}
+                        {cliCopied ? "Copied" : "Re-run Local"}
                     </Button>
                     <Button
                         size="sm"
-                        className="font-mono text-[10px] bg-brand hover:bg-brand/90"
+                        variant="outline"
+                        className="text-xs border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
                         disabled={isLoading || !canBranch || !selectedEvent}
                         onClick={() => {
                             if (!selectedEvent) return;
@@ -323,13 +380,14 @@ function TraceDetailInner() {
                         }}
                         title={!canBranch ? "Only Owners and Devs can create branches" : `Create a new branch from Step ${selectedEvent?.seq ?? 0}`}
                     >
-                        <GitFork className="w-3 h-3 mr-2" />
-                        {isLoading ? "FORKING..." : `FORK_AT_STEP_${selectedEvent?.seq ?? 0}`}
+                        <GitFork className="w-3.5 h-3.5 mr-2" />
+                        {isLoading ? "Forking..." : `Fork at Step ${selectedEvent?.seq ?? 0}`}
                     </Button>
                     <Button
                         size="sm"
-                        className="font-mono text-[10px] bg-green-600 hover:bg-green-500"
+                        className="text-xs bg-zinc-900 dark:bg-zinc-200 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white font-medium"
                         disabled={isReplaying}
+                        //... logic remains in the next snippet if I split it, wait I must include logic here
                         onClick={async () => {
                             try {
                                 setIsReplaying(true);
@@ -365,96 +423,50 @@ function TraceDetailInner() {
                         }}
                     >
                         {isReplaying ? (
-                            <Clock className="w-3 h-3 mr-2 animate-spin" />
+                            <Clock className="w-3.5 h-3.5 mr-2 animate-spin" />
                         ) : (
-                            <Cpu className="w-3 h-3 mr-2" />
+                            <Cpu className="w-3.5 h-3.5 mr-2" />
                         )}
-                        {isReplaying ? "RUNNING..." : activeBranchId ? "RUN_BRANCH" : "RUN_SANDBOX"}
+                        {isReplaying ? "Running..." : activeBranchId ? "Run Branch" : "Run Sandbox"}
                     </Button>
+                    <ModeToggle />
                     <Button
-                        variant="outline"
-                        size="sm"
-                        className="font-mono text-[10px] border-red-500/20 text-red-400 hover:bg-red-500/5"
+                        variant="ghost"
+                        size="icon"
+                        className="text-zinc-400 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10"
                         onClick={handleTrash}
+                        title="Trash Trace"
                     >
-                        <Trash2 className="w-3 h-3 mr-2" />
-                        TRASH
+                        <Trash2 className="w-4 h-4" />
                     </Button>
-
                 </div>
             </div>
 
-            {/* Seeker Bar */}
-            <Card className="bg-card/40 border-border p-4">
-                <div className="flex items-center gap-4">
-                    <div className="flex-1 flex flex-col gap-2">
-                        <div className="flex justify-between items-center text-[10px] font-mono uppercase opacity-60">
-                            <span>{events.length > 0 ? `Step ${Math.floor((sliderValue / 100) * (events.length - 1))}` : "No_Steps"}</span>
-                            <span>{events.length} events</span>
-                        </div>
-                        <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={sliderValue}
-                            onChange={(e) => {
-                                const val = parseInt(e.target.value);
-                                setSliderValue(val);
-                                if (events.length > 0) {
-                                    const index = Math.floor((val / 100) * (events.length - 1));
-                                    setSelectedEvent(events[index]);
-                                }
-                            }}
-                            className="w-full h-1 bg-brand/20 rounded-lg appearance-none cursor-pointer accent-brand"
-                        />
+            {/* Main Layout Area */}
+            <div className="flex-1 flex overflow-hidden relative">
+
+                {/* L Pane: Timeline (Dense, scannable) */}
+                <div className="w-[340px] flex-none border-r border-zinc-200 dark:border-white/5 flex flex-col bg-white dark:bg-black/20">
+                    <div className="px-4 py-3 border-b border-zinc-200 dark:border-white/5 flex items-center gap-2 text-[10px] font-semibold uppercase text-zinc-500 dark:text-white/50 tracking-wider">
+                        <History className="w-3.5 h-3.5" /> Timeline Loop
                     </div>
-                    <div className="w-24 text-center border-l border-border pl-4">
-                        <div className="text-xl font-bold font-mono text-brand">{sliderValue}%</div>
-                        <div className="text-[9px] font-mono uppercase opacity-50">Offset</div>
-                    </div>
-                </div>
-            </Card>
-
-            {/* CLI Command Bar */}
-            <div className="flex items-center gap-3 px-4 py-3 bg-black/30 border border-white/5 rounded-lg font-mono text-[11px]">
-                <TerminalSquare className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                <code className="flex-1 text-foreground/80 truncate select-all">{cliCommand}</code>
-                <button onClick={copyCliCommand} className="text-muted-foreground hover:text-brand transition-colors shrink-0">
-                    {cliCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-            </div>
-
-            {/* Source Code Viewer */}
-            {showScript && (
-                <ScriptViewer
-                    traceId={traceId}
-                    highlightLine={selectedEvent?.payload?.line}
-                />
-            )}
-
-            <div className="grid gap-6 md:grid-cols-12">
-                {/* Timeline Bar */}
-                <Card className="md:col-span-8 bg-card/40 border-border">
-                    <CardHeader className="pb-3 border-b border-border/50">
-                        <CardTitle className="text-xs font-mono flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
-                            <History className="w-3 h-3" /> Event_Timeline
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <div className="max-h-[600px] overflow-y-auto font-mono text-xs">
-                            {eventsLoading ? (
-                                <div className="p-12 text-center opacity-40">STREAMING_EVENTS...</div>
-                            ) : events.length === 0 ? (
-                                <div className="p-12 text-center opacity-40 italic text-[10px]">NO_EVENTS_CAPTURED</div>
-                            ) : (
-                                <div className="divide-y divide-border/50">
-                                    {events.map((event: TraceEvent, i: number) => (
+                    <div className="flex-1 overflow-y-auto">
+                        {eventsLoading ? (
+                            <div className="p-12 text-center text-zinc-500 text-xs font-semibold animate-pulse">Streaming Events...</div>
+                        ) : events.length === 0 ? (
+                            <div className="p-12 text-center text-zinc-500 italic text-xs font-semibold">No Events Captured</div>
+                        ) : (
+                            <div className="pb-24">
+                                {events.map((event: TraceEvent, i: number) => (
+                                    <div id={`event-row-${i}`} key={i}>
                                         <TraceEventRow
-                                            key={i}
                                             event={event}
                                             expectedEvent={parentEventMap.get(event.seq)}
                                             isSelected={selectedEvent === event}
-                                            onSelect={() => setSelectedEvent(event)}
+                                            onSelect={() => {
+                                                setSelectedEvent(event);
+                                                setSliderValue(Math.floor((i / Math.max(events.length - 1, 1)) * 100));
+                                            }}
                                             onFork={(e) => {
                                                 setForkTargetEvent(e);
                                                 setIsForkDialogOpen(true);
@@ -463,263 +475,382 @@ function TraceDetailInner() {
                                             scriptContent={metadata?.script_content}
                                             canBranch={canBranch}
                                         />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Details Panel */}
-                <div className="md:col-span-4 space-y-6">
-                    <Card className="bg-card/40 border-border overflow-hidden">
-                        <CardHeader className="bg-brand/5 border-b border-brand/10">
-                            <CardTitle className="text-xs font-mono flex items-center gap-2 text-brand uppercase tracking-wider">
-                                <Box className="w-3 h-3" /> Event_Inspector
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 overflow-x-auto">
-                            {selectedEvent ? (
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-muted-foreground uppercase opacity-60">
-                                        <div>SEQ_NO: {selectedEvent.seq || 0}</div>
-                                        <div>TYPE: {selectedEvent.type}</div>
                                     </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
 
-                                    {parentEventMap.has(selectedEvent.seq) && JSON.stringify(selectedEvent.payload) !== JSON.stringify(parentEventMap.get(selectedEvent.seq).payload) ? (
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <div className="text-[9px] font-bold uppercase text-red-400 flex items-center gap-1">
-                                                        <AlertCircle className="w-3 h-3" /> Historical_Record
-                                                    </div>
-                                                    <div className="bg-red-500/5 p-3 rounded-lg border border-red-500/20">
-                                                        <pre className="text-[10px] font-mono text-red-300 overflow-auto max-h-[300px]">
-                                                            {JSON.stringify(parentEventMap.get(selectedEvent.seq).payload, null, 2)}
-                                                        </pre>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <div className="text-[9px] font-bold uppercase text-brand flex items-center gap-1">
-                                                        <CheckCircle2 className="w-3 h-3" /> Current_Execution
-                                                    </div>
-                                                    <div className="bg-brand/5 p-3 rounded-lg border border-brand/20">
-                                                        <pre className="text-[10px] font-mono text-brand overflow-auto max-h-[300px]">
-                                                            {JSON.stringify(selectedEvent.payload, null, 2)}
-                                                        </pre>
-                                                    </div>
-                                                </div>
+                {/* Center Pane: Context (Source code + Direct Event info) */}
+                <div className="flex-1 flex flex-col min-w-0 border-r border-zinc-200 dark:border-zinc-800">
+                    <div className="flex-none px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-[#111113]">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-300">
+                            <Box className="w-4 h-4 text-zinc-500" /> Execution Context
+                        </div>
+                        {selectedEvent && (
+                            <div className="text-xs font-mono text-zinc-500">
+                                {selectedEvent.type.toUpperCase()}_{selectedEvent.seq}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                        {/* Event Context Bubble */}
+                        {selectedEvent ? (
+                            <div className="space-y-6">
+                                {/* Auto-rendered UI specific to event types */}
+                                {selectedEvent.type === 'thought' && (
+                                    <div className="bg-[#14151a] border border-purple-500/20 rounded-xl p-5">
+                                        <h3 className="text-purple-400 font-semibold text-sm mb-3 flex items-center gap-2">
+                                            <Cpu className="w-4 h-4" /> Agent Reasoning
+                                        </h3>
+                                        <p className="text-sm leading-relaxed text-zinc-300 whitespace-pre-wrap">
+                                            {selectedEvent.payload.thought}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {selectedEvent.type === 'tool_call' && (
+                                    <div className="bg-[#14151a] border border-blue-500/20 rounded-xl p-5">
+                                        <h3 className="text-blue-400 font-semibold text-sm mb-3 flex items-center gap-2">
+                                            <Zap className="w-4 h-4" /> Tool Invocation: {selectedEvent.payload.name}
+                                        </h3>
+                                        <div className="text-xs font-mono text-zinc-300 bg-[#0e0e11] p-4 rounded-lg border border-zinc-800 overflow-auto">
+                                            {JSON.stringify(selectedEvent.payload.arguments || selectedEvent.payload, null, 2)}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedEvent.type === 'error' && (
+                                    <div className="bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/20 rounded-xl p-5">
+                                        <h3 className="text-red-600 dark:text-red-400 font-semibold text-sm mb-3 flex items-center gap-2">
+                                            <AlertCircle className="w-4 h-4" /> Exception
+                                        </h3>
+                                        <p className="text-sm font-mono leading-relaxed text-red-700 dark:text-red-300 whitespace-pre-wrap bg-red-100 dark:bg-red-950/20 p-4 rounded-lg border border-red-200 dark:border-red-900/30">
+                                            {selectedEvent.payload.error || selectedEvent.payload.message || JSON.stringify(selectedEvent.payload)}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Divergence Warning */}
+                                {parentEventMap.has(selectedEvent.seq) && JSON.stringify(selectedEvent.payload) !== JSON.stringify(parentEventMap.get(selectedEvent.seq).payload) && (
+                                    <div className="bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-xl p-5">
+                                        <h3 className="text-amber-600 dark:text-amber-500 font-semibold text-sm mb-3 flex items-center gap-2">
+                                            <GitFork className="w-4 h-4" /> Divergence Detected
+                                        </h3>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <div className="text-xs text-zinc-500">Expected (Parent)</div>
+                                                <pre className="text-xs font-mono text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-[#0e0e11] border border-zinc-200 dark:border-zinc-800 p-4 rounded-lg overflow-auto max-h-[200px]">
+                                                    {JSON.stringify(parentEventMap.get(selectedEvent.seq).payload, null, 2)}
+                                                </pre>
                                             </div>
-                                            <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-[10px] font-mono text-red-400">
-                                                DIVERGENCE_DETECTED: This step differs from the parent trace. The agent took a different path.
+                                            <div className="space-y-2">
+                                                <div className="text-xs text-amber-600 dark:text-amber-500">Actual (Current)</div>
+                                                <pre className="text-xs font-mono text-amber-700 dark:text-amber-400/80 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-500/20 p-4 rounded-lg overflow-auto max-h-[200px]">
+                                                    {JSON.stringify(selectedEvent.payload, null, 2)}
+                                                </pre>
                                             </div>
                                         </div>
-                                    ) : (
-                                        <div className="bg-black/40 p-3 rounded-lg border border-white/5">
-                                            <pre className="text-[10px] font-mono text-brand overflow-auto max-h-[400px]">
+                                    </div>
+                                )}
+
+                                {/* Raw Payload Fallback (if not explicitly handled above or user wants to see everything) */}
+                                {(!['thought', 'tool_call', 'error'].includes(selectedEvent.type) || !parentEventMap.has(selectedEvent.seq)) && (
+                                    <div className="space-y-2">
+                                        <div className="text-xs font-medium text-zinc-500">Raw Payload Data</div>
+                                        <div className="bg-zinc-100 dark:bg-[#0e0e11] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                                            <pre className="text-xs font-mono text-zinc-700 dark:text-zinc-300 overflow-auto max-h-[400px]">
                                                 {JSON.stringify(selectedEvent.payload, null, 2)}
                                             </pre>
                                         </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="py-12 text-center opacity-30 text-[10px] font-mono italic uppercase">
-                                    SELECT_EVENT_TO_INSPECT
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="bg-card/40 border-border">
-                        <CardHeader className="pb-3 border-b border-border/50">
-                            <CardTitle className="text-xs font-mono flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
-                                <Cpu className="w-3 h-3" /> Execution_Node
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 text-[10px] font-mono space-y-2 opacity-80">
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground uppercase">Runtime</span>
-                                <span>{metadata?.runtime ?? "Python_3.x"}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground uppercase">Event_Count</span>
-                                <span className="text-brand">{events.length}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground uppercase">Status</span>
-                                <span className={trace?.status === 'completed' ? 'text-green-400' : 'text-yellow-400'}>{trace?.status?.toUpperCase() ?? "UNKNOWN"}</span>
-                            </div>
-                            {metadata?.script_path && (
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground uppercase">Script</span>
-                                    <span className="text-xs opacity-60 truncate max-w-[120px]" title={metadata.script_path}>{metadata.script_path.split(/[\/\\]/).pop()}</span>
-                                </div>
-                            )}
-                            {audit?.created_by && (
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground uppercase">Created By</span>
-                                    <span className="text-brand truncate max-w-[140px]" title={audit.created_by}>{audit.created_by}</span>
-                                </div>
-                            )}
-                            {audit?.updated_by && (
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground uppercase">Last Modified</span>
-                                    <span className="text-yellow-400 truncate max-w-[140px]" title={audit.updated_by}>{audit.updated_by}</span>
-                                </div>
-                            )}
-                            {audit?.updated_at && (
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground uppercase">Modified At</span>
-                                    <span className="opacity-60">{new Date(audit.updated_at).toLocaleString()}</span>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-
-            {/* Replay State Panel */}
-            {showReplayPanel && replayState && (
-                <div className="mt-6 rounded-lg border border-green-500/20 bg-black/60 overflow-hidden">
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-green-500/20 bg-green-500/5">
-                        <span className="font-mono text-xs font-bold uppercase text-green-400 flex items-center gap-2">
-                            <Cpu className="w-3 h-3" />
-                            {replayState.branch ? `Branch Replay — ${replayState.branch.name ?? replayState.branch.branch_id?.slice(0, 8)}` : "Sandbox Replay"}
-                        </span>
-                        <div className="flex items-center gap-3">
-                            <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${replayState.exitCode === 0 ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
-                                {replayState.exitCode === 0 ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                                {replayState.exitCode === 0 ? 'DETERMINISTIC_PASS' : `EXIT_${replayState.exitCode}`}
-                            </div>
-                            <button onClick={() => setShowReplayPanel(false)} className="text-xs opacity-40 hover:opacity-80 font-mono">✕</button>
-                        </div>
-                    </div>
-
-                    {/* Stats row */}
-                    <div className="grid grid-cols-3 divide-x divide-white/5 border-b border-white/5">
-                        <div className="px-4 py-2 text-[10px] font-mono">
-                            <div className="text-muted-foreground uppercase opacity-60">Events Consumed</div>
-                            <div className="text-green-400 font-bold">{replayState.eventsConsumed ?? replayState.eventCount ?? '—'}</div>
-                        </div>
-                        <div className="px-4 py-2 text-[10px] font-mono">
-                            <div className="text-muted-foreground uppercase opacity-60">Fingerprint</div>
-                            <div className="text-brand font-bold font-mono">{replayState.replayFingerprint?.slice(0, 16) ?? replayState.parentHash?.slice(0, 12) ?? '—'}…</div>
-                        </div>
-                        <div className="px-4 py-2 text-[10px] font-mono">
-                            <div className="text-muted-foreground uppercase opacity-60">Fork Step</div>
-                            <div className="text-foreground">{replayState.branch?.fork_step ?? '—'}</div>
-                        </div>
-                    </div>
-
-                    {/* Terminal stdout */}
-                    {replayState.stdout && (
-                        <div className="p-4">
-                            <div className="text-[9px] font-mono uppercase text-muted-foreground opacity-50 mb-2 flex items-center gap-1">
-                                <Terminal className="w-3 h-3" /> Sandbox Output
-                            </div>
-                            <pre className="text-[10px] font-mono text-green-300/80 bg-black/40 border border-white/5 rounded p-3 max-h-[300px] overflow-auto whitespace-pre-wrap leading-relaxed">
-                                {replayState.stdout.split('\n').filter((l: string) => l.trim()).join('\n')}
-                            </pre>
-                        </div>
-                    )}
-                    {replayState.stderr && (
-                        <div className="px-4 pb-4">
-                            <div className="text-[9px] font-mono uppercase text-red-400 opacity-70 mb-2">Stderr</div>
-                            <pre className="text-[10px] font-mono text-red-300 bg-red-500/5 border border-red-500/20 rounded p-3 max-h-[150px] overflow-auto">
-                                {replayState.stderr}
-                            </pre>
-                        </div>
-                    )}
-                </div>
-            )}
-
-
-            {/* Multiverse Diff View */}
-            {activeDiffBranch && (
-                <div className="mt-6">
-                    <MultiverseView
-                        traceId={traceId}
-                        baseEvents={events}
-                        branch={activeDiffBranch}
-                    />
-                </div>
-            )}
-
-            {/* Branch selector for diff */}
-            {branches.length > 0 && !activeDiffBranch && (
-                <div className="mt-6 flex items-center gap-3 font-mono text-xs opacity-60">
-                    <span className="uppercase">Branches available —</span>
-                    {branches.map((b: any) => (
-                        <button
-                            key={b.id}
-                            onClick={() => setActiveDiffBranch(b)}
-                            className="px-3 py-1 rounded border border-border/50 hover:border-brand/50 hover:text-brand transition-colors"
-                        >
-                            Diff: {b.name ?? b.id.slice(0, 10)}
-                        </button>
-                    ))}
-                </div>
-            )}
-            {activeDiffBranch && (
-                <button
-                    onClick={() => setActiveDiffBranch(null)}
-                    className="mt-2 font-mono text-[10px] opacity-40 hover:opacity-80"
-                >
-                    ✕ close diff
-                </button>
-            )}
-            {/* Central Fork Dialog */}
-            <Dialog open={isForkDialogOpen} onOpenChange={setIsForkDialogOpen}>
-                <DialogContent className="sm:max-w-[1000px] h-[80vh] flex flex-col">
-                    <DialogHeader>
-                        <DialogTitle>Fork Trace at Step {forkTargetEvent?.seq}</DialogTitle>
-                        <DialogDescription>
-                            Create a new branch from this point. You can override the event data below.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="flex-1 grid grid-cols-2 gap-4 py-4 min-h-0">
-                        <div className="flex flex-col gap-2 h-full">
-                            <label className="text-xs font-bold uppercase text-muted-foreground">Source Script Context</label>
-                            <div className="bg-muted/30 rounded-md border border-border p-2 flex-1 overflow-auto font-mono text-[10px] relative">
-                                {metadata?.script_content ? (
-                                    <pre className="whitespace-pre-wrap">{metadata.script_content}</pre>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full opacity-40 italic">
-                                        Source code not available for this trace.
                                     </div>
                                 )}
                             </div>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-sm text-zinc-500">
+                                Select an event from the timeline to view details
+                            </div>
+                        )}
+
+                        {/* Always show Script Viewer below context if enabled */}
+                        {showScript && (
+                            <div className="mt-8 border-t border-zinc-200 dark:border-white/5 pt-8">
+                                <ScriptViewer
+                                    traceId={traceId}
+                                    highlightLine={selectedEvent?.payload?.line}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Right Pane: State & Metadata */}
+                <div className="w-[300px] flex-none flex flex-col bg-zinc-50 dark:bg-[#14151a]">
+                    <div className="flex-none px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-300">
+                        <TerminalSquare className="w-4 h-4 text-zinc-500" /> State Monitor
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                        <div className="space-y-3">
+                            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Environment</h4>
+                            <div className="bg-white dark:bg-[#0e0e11] border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-sm font-medium space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-zinc-500">Runtime</span>
+                                    <span className="text-zinc-800 dark:text-zinc-300">{metadata?.runtime ?? "Unknown"}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-zinc-500">Nodes</span>
+                                    <span className="text-zinc-800 dark:text-zinc-300">{events.length}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-zinc-500">Final State</span>
+                                    <span className={trace?.status === 'completed' ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}>
+                                        {trace?.status?.toUpperCase() ?? "UNKNOWN"}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-2 h-full">
-                            <label className="text-xs font-bold uppercase text-muted-foreground">Event Payload Override</label>
-                            <Textarea
-                                value={overrideJson}
-                                onChange={(e) => setOverrideJson(e.target.value)}
-                                className="font-mono text-xs flex-1 resize-none"
-                            />
+
+                        <div className="space-y-3">
+                            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">CLI Replay Cmd</h4>
+                            <div className="bg-zinc-100 dark:bg-zinc-800/30 border border-zinc-200 dark:border-zinc-700/50 rounded-lg p-3 group relative cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors" onClick={copyCliCommand}>
+                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400">
+                                    {cliCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                </div>
+                                <code className="text-xs font-mono text-zinc-700 dark:text-zinc-300 block pr-6 break-all">
+                                    {cliCommand}
+                                </code>
+                            </div>
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsForkDialogOpen(false)}>Cancel</Button>
-                        <Button
-                            onClick={async () => {
-                                if (!forkTargetEvent) return;
-                                try {
-                                    const payload = JSON.parse(overrideJson);
-                                    await createBranch(traceId, forkTargetEvent.seq, `Fork at Step ${forkTargetEvent.seq}`, payload);
-                                    setIsForkDialogOpen(false);
-                                } catch (e) {
-                                    alert("Invalid JSON format in payload override");
-                                }
-                            }}
-                            disabled={isLoading}
+                </div>
+
+                {/* SPLIT SCREEN SANDBOX (Branched Timeline Overlay) */}
+                {isForkDialogOpen && forkTargetEvent && (
+                    <div className="absolute inset-0 z-30 flex animate-in slide-in-from-right-16 duration-300">
+                        {/* Semi-transparent backdrop to fade the main timeline */}
+                        <div
+                            className="w-[340px] flex-none bg-black/40 backdrop-blur-sm cursor-pointer transition-colors hover:bg-black/50"
+                            onClick={() => setIsForkDialogOpen(false)}
+                            title="Click to cancel branching"
+                        />
+
+                        {/* The Sandbox Console */}
+                        <div className="flex-1 flex flex-col bg-white dark:bg-[#0e0e11] border-l border-zinc-200 dark:border-zinc-800 shadow-2xl">
+                            <div className="flex-none px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-[#111113] flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-zinc-100 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                                        <GitFork className="w-5 h-5 text-zinc-600 dark:text-zinc-300" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Branch Reality Sandbox</h2>
+                                        <p className="text-xs text-zinc-500 mt-0.5">Diverging from Step {forkTargetEvent.seq}</p>
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setIsForkDialogOpen(false)}
+                                    className="text-zinc-500 hover:text-zinc-300"
+                                >
+                                    Cancel (Esc)
+                                </Button>
+                            </div>
+
+                            <div className="flex-1 flex overflow-hidden">
+                                {/* Left: Target Event Override */}
+                                <div className="flex-1 flex flex-col border-r border-zinc-200 dark:border-zinc-800 p-6 space-y-4">
+                                    <div className="flex items-center gap-2 text-xs font-semibold text-zinc-400 uppercase tracking-widest">
+                                        <Zap className="w-3.5 h-3.5" /> Payload Override
+                                    </div>
+                                    <p className="text-sm text-zinc-500 leading-relaxed">
+                                        You are altering the state of the agent at <strong className="text-zinc-800 dark:text-zinc-300">Step {forkTargetEvent.seq}</strong>.
+                                        Modify the JSON payload below to spin up a fresh sandbox from this new reality.
+                                    </p>
+
+                                    <div className="flex-1 flex flex-col relative group mt-2">
+                                        <Textarea
+                                            value={overrideJson}
+                                            onChange={(e) => setOverrideJson(e.target.value)}
+                                            className="flex-1 resize-none bg-zinc-50 dark:bg-[#14151a] border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-300 font-mono text-sm focus-visible:ring-1 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-700 p-4 leading-relaxed"
+                                            spellCheck={false}
+                                        />
+                                        <div className="absolute top-4 right-4 text-[10px] font-semibold text-zinc-400 dark:text-zinc-600 uppercase bg-white dark:bg-[#0e0e11] border border-zinc-200 dark:border-zinc-800 px-2 py-1 rounded select-none shadow-sm">
+                                            JSON
+                                        </div>
+                                    </div>
+
+                                    <Button
+                                        size="lg"
+                                        className="w-full bg-zinc-900 dark:bg-zinc-200 hover:bg-zinc-800 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold mt-4"
+                                        onClick={async () => {
+                                            try {
+                                                const payload = JSON.parse(overrideJson);
+                                                await createBranch(traceId, forkTargetEvent.seq, `Fork at Step ${forkTargetEvent.seq}`, payload);
+                                                setIsForkDialogOpen(false);
+                                            } catch (e) {
+                                                alert("Invalid JSON format in payload override");
+                                            }
+                                        }}
+                                        disabled={isLoading}
+                                    >
+                                        <Cpu className="w-4 h-4 mr-2" />
+                                        {isLoading ? "Running Sandbox..." : "Execute Branch"}
+                                    </Button>
+                                </div>
+
+                                {/* Right: Context Reference */}
+                                <div className="w-[400px] flex-none flex flex-col p-6 space-y-4 bg-zinc-50 dark:bg-[#14151a]">
+                                    <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500 uppercase tracking-widest">
+                                        <FileCode2 className="w-3.5 h-3.5" /> Source Context
+                                    </div>
+
+                                    <div className="flex-1 bg-white dark:bg-[#0e0e11] rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 overflow-auto relative group">
+                                        {metadata?.script_content ? (
+                                            <pre className="text-xs font-mono text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap leading-relaxed">
+                                                {metadata.script_content}
+                                            </pre>
+                                        ) : (
+                                            <div className="h-full flex items-center justify-center text-zinc-600 text-sm italic">
+                                                No script context available
+                                            </div>
+                                        )}
+                                        <div className="absolute top-4 right-4 text-[10px] font-semibold text-zinc-400 dark:text-zinc-600 uppercase bg-zinc-50 dark:bg-[#14151a] border border-zinc-200 dark:border-zinc-800 px-2 py-1 rounded select-none shadow-sm">
+                                            READ-ONLY
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Unified Bottom Scrubber */}
+            <div className="flex-none h-16 bg-white dark:bg-[#111113] border-t border-zinc-200 dark:border-zinc-800 px-6 flex items-center gap-6 shadow-md z-20">
+                <div className="w-16 flex flex-col items-center justify-center shrink-0 border-r border-zinc-200 dark:border-zinc-800 pr-6">
+                    <div className="text-[10px] font-semibold text-zinc-500 uppercase">Keys</div>
+                    <div className="text-xs font-mono font-medium text-zinc-500 dark:text-zinc-400 mt-1 flex gap-1">
+                        <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded shadow-sm border border-zinc-200 dark:border-zinc-700/50">J</span>
+                        <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded shadow-sm border border-zinc-200 dark:border-zinc-700/50">K</span>
+                    </div>
+                </div>
+
+                <div className="flex-1 flex flex-col justify-center h-full relative cursor-pointer group">
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={sliderValue}
+                        onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            setSliderValue(val);
+                            if (events.length > 0) {
+                                const index = Math.floor((val / 100) * (events.length - 1));
+                                setSelectedEvent(events[index]);
+                                document.getElementById(`event-row-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        }}
+                        className="w-full absolute inset-y-0 opacity-0 cursor-pointer z-10"
+                    />
+
+                    {/* Visual Scrubber Track */}
+                    <div className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full relative overflow-hidden group-hover:h-1.5 transition-all">
+                        <div
+                            className="absolute left-0 top-0 bottom-0 bg-zinc-500 dark:bg-zinc-400 rounded-full transition-all duration-100 ease-linear"
+                            style={{ width: `${sliderValue}%` }}
+                        />
+                    </div>
+                </div>
+
+                <div className="w-20 shrink-0 text-right border-l border-zinc-200 dark:border-zinc-800 pl-6">
+                    <div className="text-sm font-semibold font-mono text-zinc-600 dark:text-zinc-400">{sliderValue}%</div>
+                </div>
+            </div>
+
+            {/* Multiline/Popup Views Overlay (Top Layer) */}
+            <div className="absolute top-20 right-8 w-1/3 z-40 max-w-sm flex flex-col gap-4 pointer-events-none">
+                {/* Replay State Panel */}
+                {showReplayPanel && replayState && (
+                    <div className="pointer-events-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0e0e11] shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300">
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-[#111113]">
+                            <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-300 flex items-center gap-2">
+                                <Cpu className="w-3.5 h-3.5 text-zinc-500" />
+                                {replayState.branch ? `Branch Replay — ${replayState.branch.name ?? replayState.branch.branch_id?.slice(0, 8)}` : "Sandbox Replay"}
+                            </span>
+                            <div className="flex items-center gap-3">
+                                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${replayState.exitCode === 0 ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-500' : 'bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-500'}`}>
+                                    {replayState.exitCode === 0 ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                                    {replayState.exitCode === 0 ? 'Pass' : `Exit ${replayState.exitCode}`}
+                                </div>
+                                <button onClick={() => setShowReplayPanel(false)} className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors">
+                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 3L3 9M3 3L9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Internal State */}
+                        <div className="p-4 space-y-4">
+                            <div className="flex items-center gap-4 text-xs">
+                                <div><span className="text-zinc-500">Events:</span> <span className="text-zinc-800 dark:text-zinc-300 font-medium ml-1">{replayState.eventsConsumed ?? 0}</span></div>
+                                <div><span className="text-zinc-500">Hash:</span> <span className="text-zinc-800 dark:text-zinc-300 font-mono ml-1">{replayState.replayFingerprint?.slice(0, 8) ?? '—'}</span></div>
+                            </div>
+                            {replayState.stdout && (
+                                <pre className="text-xs font-mono text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-[#14151a] border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 max-h-[200px] overflow-auto whitespace-pre-wrap leading-relaxed">
+                                    {replayState.stdout.split('\n').filter((l: string) => l.trim()).join('\n')}
+                                </pre>
+                            )}
+                            {replayState.stderr && (
+                                <pre className="text-xs font-mono text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-lg p-3 max-h-[150px] overflow-auto whitespace-pre-wrap">
+                                    {replayState.stderr}
+                                </pre>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Multiverse Diff View */}
+                {activeDiffBranch && (
+                    <div className="pointer-events-auto shadow-2xl animate-in slide-in-from-right-8 duration-300 bg-white dark:bg-[#0e0e11] rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                        <MultiverseView
+                            traceId={traceId}
+                            baseEvents={events}
+                            branch={activeDiffBranch}
+                        />
+                        <button
+                            onClick={() => setActiveDiffBranch(null)}
+                            className="w-full text-center py-3 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 bg-zinc-50 dark:bg-[#111113] hover:bg-zinc-100 dark:hover:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-800 transition-colors"
                         >
-                            {isLoading ? "Forking..." : "Fork & Run"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                            Close Diff View
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Branch selector overlay bottom left */}
+            {branches.length > 0 && !activeDiffBranch && (
+                <div className="absolute bottom-20 left-6 z-30 flex items-center gap-3 text-sm bg-white/90 dark:bg-zinc-900/90 px-4 py-2 rounded-full border border-zinc-200 dark:border-zinc-800 shadow-lg backdrop-blur-md">
+                    <GitFork className="w-4 h-4 text-zinc-500" />
+                    <span className="text-zinc-600 dark:text-zinc-400 text-xs font-medium">Available Branches</span>
+                    <div className="flex items-center gap-2 border-l border-zinc-200 dark:border-zinc-800 pl-3">
+                        {branches.map((b: any) => (
+                            <button
+                                key={b.id}
+                                onClick={() => setActiveDiffBranch(b)}
+                                className="px-3 py-1 text-xs font-medium rounded-full border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-900 dark:hover:bg-zinc-200 hover:text-white dark:hover:text-zinc-900 hover:border-zinc-900 dark:hover:border-zinc-300 transition-colors"
+                            >
+                                {b.name ?? b.id.slice(0, 8)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Central Fork Dialog (Keeping for now, but restyled) */}
+            {/* Removed in favor of inline Sandbox mode */}
         </div>
     );
 }
