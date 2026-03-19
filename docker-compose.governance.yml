@@ -1,0 +1,14 @@
+version: "3.9"
+services:
+  governance-runner:
+    image: agenttrace/governance:py3.12.1
+    network_mode: none          # hard block all outbound network traffic for absolute isolation
+    read_only: true             # prevent filesystem tampering anywhere except explicitly mounted paths
+    volumes:
+      - ./traces:/traces        # Input trace to mount and output result path to write to
+    environment:
+      - AGENTTRACE_SIGNING_KEY  # Passed explicitly from the host OS environment at strictly runtime securely
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

@@ -20,6 +20,8 @@ class AgentTraceClient:
             return
 
         def _upload():
+            from .context import _capturing
+            token = _capturing.set(True)
             try:
                 endpoint = f"{api_url}/trace/register"
                 resp = requests.post(
@@ -35,6 +37,8 @@ class AgentTraceClient:
                     print(f"[AgentTrace] Upload failed ({resp.status_code}): {resp.text}")
             except Exception as e:
                 print(f"[AgentTrace] Upload error: {e}")
+            finally:
+                _capturing.reset(token)
 
         if Config.mode == "replay":
             # 🛑 Replay mode is strictly read-only. We never emit new telemetry during simulation.

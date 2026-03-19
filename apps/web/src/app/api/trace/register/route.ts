@@ -171,6 +171,23 @@ export async function POST(req: Request) {
             }
         }
 
+        // ─── Upload requirements.txt if provided ────────────
+        const requirements = body.requirements;
+        if (requirements && typeof requirements === 'string' && requirements.trim()) {
+            const { error: reqUploadError } = await supabaseAdmin.storage
+                .from('traces')
+                .upload(`${trace_id}/requirements.txt`, requirements, {
+                    contentType: 'text/plain',
+                    upsert: true,
+                });
+
+            if (reqUploadError) {
+                console.error('[API] Requirements upload failed:', reqUploadError);
+            } else {
+                console.log(`[API] Uploaded requirements.txt for trace ${trace_id} (${requirements.split('\\n').length} packages)`);
+            }
+        }
+
         console.log(`[API] Trace registered: ${trace_id} → org ${org_id} (${spans?.length || 0} spans, ${events?.length || 0} events${source_code ? ', +script' : ''})`);
 
         return NextResponse.json({

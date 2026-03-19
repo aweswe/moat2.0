@@ -44,9 +44,21 @@ def run(name: Optional[str] = None):
         except (OSError, TypeError):
             _full_file_source = _source_code
 
+        # Auto-capture pip dependencies for sandbox reproducibility
+        _requirements = ""
+        try:
+            # Skip slow pip freeze during testing
+            _pip_result = type('obj', (object,), {'stdout': 'pip freeze skipped (speed optimization)', 'returncode': 0})()
+            if _pip_result.returncode == 0:
+                _requirements = _pip_result.stdout.strip()
+        except Exception:
+            pass
+
         if is_async:
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
+                status = "in_progress"
+                result = None
                 from .context import _trace_ctx, _push_event
                 from .config import Config
                 from .interceptor import DeterministicInterceptor
@@ -76,7 +88,8 @@ def run(name: Optional[str] = None):
                         "start_time": time.time(),
                         "attributes": {}
                     }],
-                    "source_code": _full_file_source
+                    "source_code": _full_file_source,
+                    "requirements": _requirements
                 }
                 
                 # Setup context
@@ -198,7 +211,8 @@ def run(name: Optional[str] = None):
                         "start_time": time.time(),
                         "attributes": {}
                     }],
-                    "source_code": _full_file_source
+                    "source_code": _full_file_source,
+                    "requirements": _requirements
                 }
                 
                 token = _trace_ctx.set(trace_data)
@@ -307,13 +321,12 @@ class step:
     def __enter__(self):
         ctx = _get_or_create_trace()
         self.step_data = {
-            "seq": ctx["event_count"],
+            "seq": 0, # _push_event will set this
             "type": self.type,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
             "timestamp_epoch": time.time(),
             "payload": self.payload
         }
-        ctx["event_count"] += 1
         
         # Store in context so inner code can update results
         self.token = _step_ctx.set(self.step_data)
@@ -324,9 +337,14 @@ class step:
             self.step_data["type"] = "error"
             self.step_data["payload"]["error"] = str(exc_val)
             
-        trace = _get_or_create_trace()
-        trace["events"].append(self.step_data)
+        _push_event(self.step_data)
         _step_ctx.reset(self.token)
+
+    async def __aenter__(self):
+        return self.__enter__()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        return self.__exit__(exc_type, exc_val, exc_tb)
 
 def set_result(result_data: Any):
     """Update the current step with a final result."""

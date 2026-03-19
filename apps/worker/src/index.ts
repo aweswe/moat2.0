@@ -77,7 +77,7 @@ async function processJob(job: any) {
         // 3. Spawn Python process
         console.log(`▶️ Executing script...`);
         const rootDir = path.resolve(__dirname, '../../..'); // Project root
-        const moatDir = path.join(rootDir, 'moat');
+        const moatDir = path.join(rootDir, 'apps', 'backend');
 
         const pythonProcess = spawn('python', [scriptPath], {
             cwd: tempDir,

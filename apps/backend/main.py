@@ -7,12 +7,15 @@ import os
 import uuid
 import hashlib
 from supabase import create_client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="AgentTrace Execution Engine")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "https://agenttracemain.vercel.app", "https://agenttrace.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -323,7 +326,7 @@ def execute_replay(req: ExecuteReplayRequest):
     
     with tempfile.TemporaryDirectory() as temp_dir:
         events_file_path = os.path.join(temp_dir, "events.json")
-        with open(events_file_path, "w") as f:
+        with open(events_file_path, "w", encoding="utf-8") as f:
             json.dump({
                 "events": events,
                 "metadata": {
@@ -333,70 +336,172 @@ def execute_replay(req: ExecuteReplayRequest):
             
         # Write agent code
         agent_file_path = os.path.join(temp_dir, "agent.py")
-        with open(agent_file_path, "w") as f:
+        with open(agent_file_path, "w", encoding="utf-8") as f:
             f.write(source_code)
             
         # Write Output target
         output_file_path = os.path.join(temp_dir, "new_trace.json")
+
+        # 3. Download and install agent dependencies
+        deps_dir = os.path.join(temp_dir, "deps")
+        os.makedirs(deps_dir, exist_ok=True)
+        engine_logs = []
+        try:
+            req_blob = client.storage.from_("traces").download(f"{req.trace_id}/requirements.txt")
+            if req_blob:
+                req_text = req_blob.decode("utf-8") if isinstance(req_blob, (bytes, bytearray)) else req_blob
+                if req_text and req_text.strip():
+                    req_file_path = os.path.join(temp_dir, "requirements.txt")
+                    with open(req_file_path, "w", encoding="utf-8") as f:
+                        f.write(req_text)
+                    msg = f"[Execution Engine] Installing {len(req_text.strip().splitlines())} packages from requirements.txt..."
+                    engine_logs.append(msg)
+                    print(msg)
+                    pip_proc = subprocess.run(
+                        [sys.executable, "-m", "pip", "install",
+                         "--target", deps_dir,
+                         "-r", req_file_path,
+                         "--quiet", "--no-warn-conflicts"],
+                        capture_output=True, text=True, timeout=120
+                    )
+                    if pip_proc.returncode == 0:
+                        engine_logs.append("[Execution Engine] Dependencies installed successfully.")
+                        print("[Execution Engine] Dependencies installed successfully.")
+                    else:
+                        engine_logs.append(f"[Execution Engine] pip install warnings/errors: {pip_proc.stderr[:300]}")
+                        print(f"[Execution Engine] pip install warnings/errors: {pip_proc.stderr[:500]}")
+        except Exception as e:
+            msg = f"[Execution Engine] Could not install requirements (non-fatal): {e}"
+            engine_logs.append(msg)
+            print(msg)
             
         # Add the backend directory itself to PYTHONPATH so the bundled `agenttrace` is importable
         backend_dir = os.path.dirname(os.path.abspath(__file__))
         python_path = os.environ.get("PYTHONPATH", "")
+        # Include backend dir FIRST so the bundled agenttrace overrides any PyPI package
+        path_parts = [backend_dir, deps_dir]
         if python_path:
-            python_path = f"{backend_dir}:{python_path}" if os.name != 'nt' else f"{backend_dir};{python_path}"
-        else:
-            python_path = backend_dir
+            path_parts.append(python_path)
+        path_sep = ";" if os.name == 'nt' else ":"
+        python_path = path_sep.join(path_parts)
 
         # Determine the governance level: 
         # 1. User specified in request (High priority/Commercial toggle)
         # 2. Default to auto-detect based on branch
         effective_gov_level = req.governance_level
         if not effective_gov_level:
-            effective_gov_level = "governance" if branch_name == "main" else "relaxed"
+            effective_gov_level = "governance" if not branch_meta else "relaxed"
 
-        sandbox_env = {
+        sandbox_env = os.environ.copy()
+        sandbox_env.update({
             "AGENTTRACE_MODE": "replay",
             "AGENTTRACE_GOVERNANCE_LEVEL": effective_gov_level,
             "AGENTTRACE_REPLAY_EVENTS_FILE": events_file_path,
             "AGENTTRACE_REPLAY_OUTPUT_FILE": output_file_path,
             "PYTHONPATH": python_path # ensure bundled agenttrace SDK is visible
-        }
-        
-        try:
-            if os.name == 'nt':
-                # Windows: MVP Process Sandbox (Timeouts only, no ulimit)
+        })
+
+        # Governance Mode: Run in the isolated Docker container
+        if effective_gov_level == "governance":
+            print(f"[Execution Engine] Launching Governance Sandbox for trace {req.trace_id}...")
+            try:
+                # We use the docker-compose.governance.yml we created.
+                # We mount the temp_dir to /traces inside the container.
+                # Note: On Render/Linux, we need to ensure paths are correctly mapped.
+                
+                # Copy the files to a predictable location if necessary, but here we just mount temp_dir
+                # Since we are in a temp_dir, we need to make sure the runner.py can find them.
+                # In our docker-compose.governance.yml, we mounted ./traces:/traces.
+                # So we should copy our temp files into a 'traces' subdir of a known path or just mount temp_dir directly.
+                
+                # For simplicity in this environment, we'll try to run the docker-compose command.
+                # We need to set AGENTTRACE_SIGNING_KEY in the environment.
+                sandbox_env["AGENTTRACE_SIGNING_KEY"] = os.environ.get("AGENTTRACE_SIGNING_KEY", "default_secret_key")
+                
+                # Create a specific directory structure for the mount
+                mount_dir = os.path.join(temp_dir, "mount")
+                os.makedirs(os.path.join(mount_dir, "input"), exist_ok=True)
+                os.makedirs(os.path.join(mount_dir, "output"), exist_ok=True)
+                
+                # Copy input files to the mount structure
+                import shutil
+                shutil.copy(events_file_path, os.path.join(mount_dir, "input", "trace.json"))
+                shutil.copy(agent_file_path, os.path.join(mount_dir, "input", f"{branch_meta.get('name') or 'agent'}.py" if branch_meta else "agent.py"))
+                
+                # Run the governance sandbox
+                # Note: We assume docker-compose.governance.yml is in the root_dir (backend_dir's parent or similar)
+                compose_path = os.path.join(os.path.dirname(backend_dir), "docker-compose.governance.yml")
+                
+                # Trigger via subprocess
                 proc = subprocess.run(
-                    [sys.executable, agent_file_path],
+                    ["docker-compose", "-f", compose_path, "run", "--rm", 
+                     "-v", f"{mount_dir}:/traces",
+                     "governance-runner"],
                     env=sandbox_env,
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=60 # Governance might take longer due to container spinup
                 )
-            else:
-                # Unix: OS-level limits script for the subprocess (ulimit)
-                run_script_path = os.path.join(temp_dir, "run.sh")
-                with open(run_script_path, "w") as f:
-                    f.write(f"""#!/bin/bash
+                
+                # Read back the result from result.json in the output mount
+                container_result_path = os.path.join(mount_dir, "output", "result.json")
+                if os.path.exists(container_result_path):
+                    with open(container_result_path, "r") as r_file:
+                        res_data = json.load(r_file)
+                        if res_data.get("status") == "fail":
+                            return {
+                                "success": False,
+                                "error": res_data.get("error_type", "GovernanceReplayFailed"),
+                                "message": f"Governance sandbox rejected the replay: {res_data.get('error')}",
+                                "stdout": proc.stdout,
+                                "stderr": proc.stderr
+                            }
+                        
+                        # If passed, we can proceed to collect stats
+                        # The runner wrote the replayed trace back too if it wanted to, but for now we focus on the pass/fail
+                
+            except Exception as e:
+                print(f"[Execution Engine] Governance Sandbox failed to launch: {e}")
+                # Fallback or error based on policy. In Governance mode, we should error.
+                raise HTTPException(status_code=500, detail=f"Governance Sandbox Error: {str(e)}")
+
+        # Relaxed Mode: Run in local subprocess (standard behavior)
+        else:
+            try:
+                if os.name == 'nt':
+                    # Windows: MVP Process Sandbox (Timeouts only, no ulimit)
+                    proc = subprocess.run(
+                        [sys.executable, agent_file_path],
+                        env=sandbox_env,
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+                else:
+                    # Unix: OS-level limits script for the subprocess (ulimit)
+                    run_script_path = os.path.join(temp_dir, "run.sh")
+                    with open(run_script_path, "w") as f:
+                        f.write(f"""#!/bin/bash
 # MVP Process Sandbox Restrictions
 ulimit -v 262144  # Limit memory to ~256MB
 ulimit -f 10000   # Limit max file size
 {sys.executable} {agent_file_path}
 """)
-                os.chmod(run_script_path, 0o755)
-    
-                # Execute with hard 30s timeout limit
-                proc = subprocess.run(
-                    ["/bin/bash", run_script_path],
-                    env=sandbox_env,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                ) # TODO: drop user privileges to nobody
+                    os.chmod(run_script_path, 0o755)
+        
+                    # Execute with hard 30s timeout limit
+                    proc = subprocess.run(
+                        ["/bin/bash", run_script_path],
+                        env=sandbox_env,
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    ) # TODO: drop user privileges to nobody
             
             # Read back generated trace
             new_events = []
             if os.path.exists(output_file_path):
-                 with open(output_file_path, "r") as f:
+                 with open(output_file_path, "r", encoding="utf-8") as f:
                      trace_data = json.load(f)
                      new_events = trace_data.get("events", [])
                      
@@ -404,6 +509,13 @@ ulimit -f 10000   # Limit max file size
             import hashlib
             # Normalize outputs to avoid false positives on whitespace
             semantic_stdout = "\n".join([line.strip() for line in proc.stdout.splitlines() if line.strip()])
+            
+            # Combine engine logs with agent output for the frontend Dev Details
+            if semantic_stdout:
+                full_stdout = "\n".join(engine_logs) + "\n\n--- Agent Output ---\n" + semantic_stdout
+            else:
+                full_stdout = "\n".join(engine_logs) + "\n\n--- Agent ran silently ---"
+                
             semantic_stderr = "\n".join([line.strip() for line in proc.stderr.splitlines() if line.strip()])
             
             # Find return value from the trace events
@@ -415,7 +527,7 @@ ulimit -f 10000   # Limit max file size
 
             fingerprint_data = {
                 "events": [omit_volatile_keys(e) for e in events],
-                "stdout": semantic_stdout,
+                "stdout": full_stdout,
                 "stderr": semantic_stderr,
                 "exit_code": proc.returncode,
                 "return_value": return_value
