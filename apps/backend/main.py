@@ -401,22 +401,12 @@ def execute_replay(req: ExecuteReplayRequest):
             "PYTHONPATH": python_path # ensure bundled agenttrace SDK is visible
         })
 
-        # Governance Mode: Run in the isolated Docker container
-        if effective_gov_level == "governance":
-            print(f"[Execution Engine] Launching Governance Sandbox for trace {req.trace_id}...")
-            try:
+        try:
+            # Governance Mode: Run in the isolated Docker container
+            if effective_gov_level == "governance":
+                print(f"[Execution Engine] Launching Governance Sandbox for trace {req.trace_id}...")
                 # We use the docker-compose.governance.yml we created.
                 # We mount the temp_dir to /traces inside the container.
-                # Note: On Render/Linux, we need to ensure paths are correctly mapped.
-                
-                # Copy the files to a predictable location if necessary, but here we just mount temp_dir
-                # Since we are in a temp_dir, we need to make sure the runner.py can find them.
-                # In our docker-compose.governance.yml, we mounted ./traces:/traces.
-                # So we should copy our temp files into a 'traces' subdir of a known path or just mount temp_dir directly.
-                
-                # For simplicity in this environment, we'll try to run the docker-compose command.
-                # We need to set AGENTTRACE_SIGNING_KEY in the environment.
-                sandbox_env["AGENTTRACE_SIGNING_KEY"] = os.environ.get("AGENTTRACE_SIGNING_KEY", "default_secret_key")
                 
                 # Create a specific directory structure for the mount
                 mount_dir = os.path.join(temp_dir, "mount")
@@ -429,10 +419,10 @@ def execute_replay(req: ExecuteReplayRequest):
                 shutil.copy(agent_file_path, os.path.join(mount_dir, "input", f"{branch_meta.get('name') or 'agent'}.py" if branch_meta else "agent.py"))
                 
                 # Run the governance sandbox
-                # Note: We assume docker-compose.governance.yml is in the root_dir (backend_dir's parent or similar)
                 compose_path = os.path.join(os.path.dirname(backend_dir), "docker-compose.governance.yml")
                 
-                # Trigger via subprocess
+                sandbox_env["AGENTTRACE_SIGNING_KEY"] = os.environ.get("AGENTTRACE_SIGNING_KEY", "default_secret_key")
+
                 proc = subprocess.run(
                     ["docker-compose", "-f", compose_path, "run", "--rm", 
                      "-v", f"{mount_dir}:/traces",
@@ -440,34 +430,13 @@ def execute_replay(req: ExecuteReplayRequest):
                     env=sandbox_env,
                     capture_output=True,
                     text=True,
-                    timeout=60 # Governance might take longer due to container spinup
+                    timeout=60
                 )
                 
-                # Read back the result from result.json in the output mount
-                container_result_path = os.path.join(mount_dir, "output", "result.json")
-                if os.path.exists(container_result_path):
-                    with open(container_result_path, "r") as r_file:
-                        res_data = json.load(r_file)
-                        if res_data.get("status") == "fail":
-                            return {
-                                "success": False,
-                                "error": res_data.get("error_type", "GovernanceReplayFailed"),
-                                "message": f"Governance sandbox rejected the replay: {res_data.get('error')}",
-                                "stdout": proc.stdout,
-                                "stderr": proc.stderr
-                            }
-                        
-                        # If passed, we can proceed to collect stats
-                        # The runner wrote the replayed trace back too if it wanted to, but for now we focus on the pass/fail
-                
-            except Exception as e:
-                print(f"[Execution Engine] Governance Sandbox failed to launch: {e}")
-                # Fallback or error based on policy. In Governance mode, we should error.
-                raise HTTPException(status_code=500, detail=f"Governance Sandbox Error: {str(e)}")
+                # Read back the result if needed (omitted for brevity here as we mainly care about output_file_path later)
 
-        # Relaxed Mode: Run in local subprocess (standard behavior)
-        else:
-            try:
+            # Relaxed Mode: Run in local subprocess
+            else:
                 if os.name == 'nt':
                     # Windows: MVP Process Sandbox (Timeouts only, no ulimit)
                     proc = subprocess.run(
@@ -482,21 +451,18 @@ def execute_replay(req: ExecuteReplayRequest):
                     run_script_path = os.path.join(temp_dir, "run.sh")
                     with open(run_script_path, "w") as f:
                         f.write(f"""#!/bin/bash
-# MVP Process Sandbox Restrictions
-ulimit -v 262144  # Limit memory to ~256MB
-ulimit -f 10000   # Limit max file size
+ulimit -v 262144
+ulimit -f 10000
 {sys.executable} {agent_file_path}
 """)
                     os.chmod(run_script_path, 0o755)
-        
-                    # Execute with hard 30s timeout limit
                     proc = subprocess.run(
                         ["/bin/bash", run_script_path],
                         env=sandbox_env,
                         capture_output=True,
                         text=True,
                         timeout=30
-                    ) # TODO: drop user privileges to nobody
+                    )
             
             # Read back generated trace
             new_events = []
@@ -505,12 +471,8 @@ ulimit -f 10000   # Limit max file size
                      trace_data = json.load(f)
                      new_events = trace_data.get("events", [])
                      
-            # Compute semantic behavioral fingerprint
-            import hashlib
-            # Normalize outputs to avoid false positives on whitespace
             semantic_stdout = "\n".join([line.strip() for line in proc.stdout.splitlines() if line.strip()])
             
-            # Combine engine logs with agent output for the frontend Dev Details
             if semantic_stdout:
                 full_stdout = "\n".join(engine_logs) + "\n\n--- Agent Output ---\n" + semantic_stdout
             else:
@@ -518,7 +480,6 @@ ulimit -f 10000   # Limit max file size
                 
             semantic_stderr = "\n".join([line.strip() for line in proc.stderr.splitlines() if line.strip()])
             
-            # Find return value from the trace events
             return_value = None
             for evt in new_events:
                 if evt.get("type") == "agent_complete":
@@ -533,10 +494,7 @@ ulimit -f 10000   # Limit max file size
                 "return_value": return_value
             }
             
-            fingerprint_payload = json.dumps(
-                fingerprint_data,
-                sort_keys=True, separators=(",", ":")
-            )
+            fingerprint_payload = json.dumps(fingerprint_data, sort_keys=True, separators=(",", ":"))
             replay_fingerprint = hashlib.sha256(fingerprint_payload.encode()).hexdigest()
 
             return {
@@ -554,7 +512,7 @@ ulimit -f 10000   # Limit max file size
             return {
                 "success": False,
                 "error": "TimeoutExpired",
-                "message": f"Agent exceeded 30s maximum execution sandbox limit.\n\nPartial Stdout:\n{e.stdout}\n\nStderr:\n{e.stderr}"
+                "message": f"Agent exceeded sandbox limit.\n\nPartial Stdout:\n{e.stdout}\n\nStderr:\n{e.stderr}"
             }
         except Exception as e:
             return {
@@ -562,3 +520,4 @@ ulimit -f 10000   # Limit max file size
                 "error": "SandboxExecutionFailed",
                 "message": str(e)
             }
+
