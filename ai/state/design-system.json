@@ -1,0 +1,16 @@
+{
+  "theme": "AgentTrace",
+  "style": "deterministic, minimal, system-like",
+  "colors": {
+    "bg-primary": "#0A0A0A",
+    "bg-secondary": "#111111",
+    "border": "#1F1F1F",
+    "accent": "#6366F1"
+  },
+  "rules": [
+    "no gradients",
+    "no shadows",
+    "8px grid",
+    "consistent cards"
+  ]
+}
