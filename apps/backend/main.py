@@ -15,7 +15,13 @@ app = FastAPI(title="AgentTrace Execution Engine")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://agenttracemain.vercel.app", "https://agenttrace.vercel.app"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://agenttracemain.vercel.app",
+        "https://agenttrace.vercel.app",
+        "https://www.theagenttrace.com",
+        "https://theagenttrace.com"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -111,7 +117,14 @@ def compute_hash(events: list, up_to_step: int) -> str:
     content = "\n".join(filtered)
     return hashlib.sha256(content.encode()).hexdigest()
 
-# --- Endpoints ---
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "service": "agenttrace-execution-engine",
+        "version": "2.0.0-resilience",
+        "node": os.environ.get("RENDER_INSTANCE_ID", "local")
+    }
 
 @app.get("/health")
 def health():
@@ -401,25 +414,39 @@ def execute_replay(req: ExecuteReplayRequest):
             "PYTHONPATH": python_path # ensure bundled agenttrace SDK is visible
         })
 
+        proc = None
         try:
             # Governance Mode: Run in the isolated Docker container
             if effective_gov_level == "governance":
                 print(f"[Execution Engine] Launching Governance Sandbox for trace {req.trace_id}...")
-                # We use the docker-compose.governance.yml we created.
-                # We mount the temp_dir to /traces inside the container.
                 
+                # Check for docker-compose.governance.yml
+                compose_path = os.path.join(os.path.dirname(backend_dir), "docker-compose.governance.yml")
+                if not os.path.exists(compose_path):
+                     return {
+                        "success": False,
+                        "error": "GovernanceUnsupported",
+                        "message": f"Governance mode requested but {os.path.basename(compose_path)} not found in root. Fallback to relaxed or check deployment."
+                    }
+                
+                # Check if docker-compose command exists
+                import shutil
+                if not shutil.which("docker-compose"):
+                    return {
+                        "success": False,
+                        "error": "DockerNotFound",
+                        "message": "Governance mode requires Docker Compose but it is not installed on this host (Render Python runtime?)."
+                    }
+
                 # Create a specific directory structure for the mount
                 mount_dir = os.path.join(temp_dir, "mount")
                 os.makedirs(os.path.join(mount_dir, "input"), exist_ok=True)
                 os.makedirs(os.path.join(mount_dir, "output"), exist_ok=True)
                 
                 # Copy input files to the mount structure
-                import shutil
-                shutil.copy(events_file_path, os.path.join(mount_dir, "input", "trace.json"))
-                shutil.copy(agent_file_path, os.path.join(mount_dir, "input", f"{branch_meta.get('name') or 'agent'}.py" if branch_meta else "agent.py"))
-                
-                # Run the governance sandbox
-                compose_path = os.path.join(os.path.dirname(backend_dir), "docker-compose.governance.yml")
+                import shutil as py_shutil
+                py_shutil.copy(events_file_path, os.path.join(mount_dir, "input", "trace.json"))
+                py_shutil.copy(agent_file_path, os.path.join(mount_dir, "input", f"{branch_meta.get('name') or 'agent'}.py" if branch_meta else "agent.py"))
                 
                 sandbox_env["AGENTTRACE_SIGNING_KEY"] = os.environ.get("AGENTTRACE_SIGNING_KEY", "default_secret_key")
 
@@ -430,7 +457,7 @@ def execute_replay(req: ExecuteReplayRequest):
                     env=sandbox_env,
                     capture_output=True,
                     text=True,
-                    timeout=60
+                    timeout=20 # Reduced for frontend sync
                 )
                 
                 # Read back the result if needed (omitted for brevity here as we mainly care about output_file_path later)
@@ -444,7 +471,7 @@ def execute_replay(req: ExecuteReplayRequest):
                         env=sandbox_env,
                         capture_output=True,
                         text=True,
-                        timeout=30
+                        timeout=20 # Reduced for frontend sync
                     )
                 else:
                     # Unix: OS-level limits script for the subprocess (ulimit)
@@ -461,9 +488,17 @@ ulimit -f 10000
                         env=sandbox_env,
                         capture_output=True,
                         text=True,
-                        timeout=30
+                        timeout=20 # Reduced for frontend sync
                     )
             
+            # Guard before reading proc
+            if proc is None:
+                return {
+                    "success": False,
+                    "error": "SandboxNotExecuted",
+                    "message": "Sandbox process was not started."
+                }
+
             # Read back generated trace
             new_events = []
             if os.path.exists(output_file_path):
@@ -520,4 +555,5 @@ ulimit -f 10000
                 "error": "SandboxExecutionFailed",
                 "message": str(e)
             }
+
 
