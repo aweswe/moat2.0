@@ -399,11 +399,13 @@ def execute_replay(req: ExecuteReplayRequest):
         python_path = path_sep.join(path_parts)
 
         # Determine the governance level: 
-        # 1. User specified in request (High priority/Commercial toggle)
-        # 2. Default to auto-detect based on branch
-        effective_gov_level = req.governance_level
-        if not effective_gov_level:
-            effective_gov_level = "governance" if not branch_meta else "relaxed"
+        effective_gov_level = req.governance_level or ("governance" if branch_meta else "relaxed")
+
+        if not source_code:
+            raise HTTPException(
+                status_code=400,
+                detail="Trace does not contain recorded source code. Upload script.py to storage or set source_code column."
+            )
 
         sandbox_env = os.environ.copy()
         sandbox_env.update({
@@ -532,13 +534,15 @@ ulimit -f 10000
             fingerprint_payload = json.dumps(fingerprint_data, sort_keys=True, separators=(",", ":"))
             replay_fingerprint = hashlib.sha256(fingerprint_payload.encode()).hexdigest()
 
+            exit_code = proc.returncode if proc is not None else None
+            
             return {
-                "success": True,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "exit_code": proc.returncode,
+                "success": proc is not None and proc.returncode == 0,
+                "stdout": proc.stdout if proc else "",
+                "stderr": proc.stderr if proc else "No process was started — source code missing or sandbox failed to launch.",
+                "exit_code": exit_code,
                 "events_consumed": len(events),
-                "replay_fingerprint": replay_fingerprint,
+                "replay_fingerprint": replay_fingerprint if proc else "n/a",
                 "branch": branch_meta,
                 "new_events": new_events if new_events else events
             }
@@ -549,6 +553,8 @@ ulimit -f 10000
                 "error": "TimeoutExpired",
                 "message": f"Agent exceeded sandbox limit.\n\nPartial Stdout:\n{e.stdout}\n\nStderr:\n{e.stderr}"
             }
+        except HTTPException:
+            raise
         except Exception as e:
             return {
                 "success": False,
