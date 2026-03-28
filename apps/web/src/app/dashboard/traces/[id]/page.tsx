@@ -887,25 +887,26 @@ function TraceDetailInner() {
                 </div>
             )}
 
-            {/* Overlay Views */}
-            <div className="absolute top-20 right-8 w-1/3 z-40 max-w-sm flex flex-col gap-4 pointer-events-none">
-                {/* Multiverse Diff View */}
-                {activeDiffBranch && (
-                    <div className="pointer-events-auto shadow-2xl animate-in slide-in-from-right-8 duration-300 bg-background rounded-xl border border-border overflow-hidden">
-                        <MultiverseView
-                            traceId={traceId}
-                            baseEvents={events}
-                            branch={activeDiffBranch}
-                        />
-                        <button
-                            onClick={() => setActiveDiffBranch(null)}
-                            className="w-full text-center py-3 text-xs font-medium text-muted-foreground hover:text-foreground bg-secondary hover:bg-muted border-t border-border transition-colors"
-                        >
-                            Close Diff View
-                        </button>
-                    </div>
-                )}
-            </div>
+            {/* Multiverse Diff View Modal */}
+            <Dialog open={!!activeDiffBranch} onOpenChange={(open) => { if (!open) setActiveDiffBranch(null); }}>
+                <DialogContent className="max-w-[1200px] w-[90vw] p-0 overflow-hidden bg-background border-border [&>button.absolute]:hidden">
+                    {activeDiffBranch && (
+                        <div className="flex flex-col max-h-[85vh]">
+                            <MultiverseView
+                                traceId={traceId}
+                                baseEvents={events}
+                                branch={activeDiffBranch}
+                            />
+                            <button
+                                onClick={() => setActiveDiffBranch(null)}
+                                className="w-full h-12 shrink-0 text-center text-xs font-medium text-muted-foreground hover:text-foreground bg-secondary hover:bg-muted border-t border-border transition-colors"
+                            >
+                                Close Diff View
+                            </button>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
 
             {/* Branch selector overlay bottom left */}
             {branches.length > 0 && !activeDiffBranch && (
