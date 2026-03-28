@@ -63,6 +63,26 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Trace not found" }, { status: 404 });
         }
 
+        let jobId = null;
+        try {
+            const { data: jobData, error: jobErr } = await supabase
+                .from('jobs')
+                .insert({
+                    trace_id: traceId,
+                    org_id: membership.org_id,
+                    status: 'running'
+                })
+                .select('id')
+                .single();
+            if (!jobErr && jobData) {
+                jobId = jobData.id;
+            } else {
+                console.error("Failed to create job record:", jobErr);
+            }
+        } catch (e) {
+            console.error("Job creation exception:", e);
+        }
+
         // Call the deterministic execution sandbox
         const enginePayload: Record<string, any> = { trace_id: traceId };
         if (branch) enginePayload.branch_id = branch;
@@ -85,10 +105,25 @@ export async function POST(req: Request) {
 
         if (!engineResponse.ok) {
             const errResult = await engineResponse.json().catch(() => ({}));
+            
+            if (jobId) {
+                await supabase.from('jobs').update({
+                    status: 'failed',
+                    error: errResult.detail || `Execution engine returned ${engineResponse.status}`
+                }).eq('id', jobId);
+            }
+            
             throw new Error(errResult.detail || `Execution engine returned ${engineResponse.status}`);
         }
 
         const result = await engineResponse.json();
+
+        if (jobId) {
+            await supabase.from('jobs').update({
+                status: result.success ? 'completed' : 'failed',
+                error: result.success ? null : (result.stderr || "Execution failed")
+            }).eq('id', jobId);
+        }
 
         return NextResponse.json({
             success: result.success,
@@ -107,6 +142,7 @@ export async function POST(req: Request) {
 
     } catch (e: any) {
         console.error("[API] POST /replay error:", e);
+        // We can't access jobId here easily due to scope, but the user gets the error.
         return NextResponse.json({ error: e.message || "Unknown error" }, { status: 500 });
     }
 }
