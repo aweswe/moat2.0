@@ -103,58 +103,58 @@ export default function TrashPage() {
             <div className="flex items-end justify-between">
                 <div className="flex items-center gap-4">
                     <Link href="/dashboard/traces">
-                        <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/5">
+                        <Button variant="ghost" size="icon" className="rounded-full hover:bg-secondary">
                             <ArrowLeft className="w-5 h-5" />
                         </Button>
                     </Link>
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <Trash2 className="w-7 h-7 text-red-400" />
+                            <Trash2 className="w-7 h-7 text-error" />
                             Trash
                         </h1>
-                        <p className="text-muted-foreground mt-1 text-sm opacity-60">
+                        <p className="text-muted-foreground mt-1 text-sm">
                             Traces moved to trash can be restored or permanently deleted.
                         </p>
                     </div>
                 </div>
             </div>
 
-            <Card className="bg-card/50 border-border overflow-hidden">
-                <CardHeader className="border-b border-border/50 py-4">
-                    <CardTitle className="text-xs font-semibold flex items-center gap-2 text-red-400 uppercase tracking-wider">
+            <Card className="bg-card border-border overflow-hidden">
+                <CardHeader className="border-b border-border py-4">
+                    <CardTitle className="text-xs font-semibold flex items-center gap-2 text-error uppercase tracking-wider">
                         <Trash2 className="w-4 h-4" />
                         {traces.length} {traces.length === 1 ? 'trace' : 'traces'} in trash
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                     {loading ? (
-                        <div className="p-24 flex flex-col items-center justify-center gap-4 opacity-40">
+                        <div className="p-24 flex flex-col items-center justify-center gap-4 text-muted-foreground">
                             <Loader2 className="w-8 h-8 animate-spin" />
-                            <span className="font-mono text-[10px] uppercase tracking-[0.2em]">Loading...</span>
+                            <span className="font-mono text-xs uppercase tracking-widest">Loading...</span>
                         </div>
                     ) : traces.length === 0 ? (
                         <div className="p-16 text-center">
-                            <Trash2 className="w-10 h-10 mx-auto mb-4 text-muted-foreground opacity-20" />
-                            <div className="text-sm font-semibold mb-1 opacity-60">Trash is empty</div>
-                            <p className="text-[10px] text-muted-foreground">
+                            <Trash2 className="w-10 h-10 mx-auto mb-4 text-muted-foreground" />
+                            <div className="text-sm font-semibold mb-1 text-muted-foreground">Trash is empty</div>
+                            <p className="text-xs text-muted-foreground">
                                 Deleted traces will appear here.
                             </p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 divide-y divide-border/50 font-mono text-xs">
+                        <div className="grid grid-cols-1 divide-y divide-border font-mono text-xs">
                             {traces.map((trace) => (
                                 <div
                                     key={trace.id}
-                                    className="p-5 flex items-center justify-between hover:bg-white/[0.02] transition-all group"
+                                    className="p-5 flex items-center justify-between hover:bg-secondary transition-colors"
                                 >
-                                    <div className="flex flex-col gap-1 opacity-60">
+                                    <div className="flex flex-col gap-1 text-muted-foreground">
                                         <div className="text-foreground font-bold text-sm tracking-tight line-through">
                                             {trace.title || trace.metadata?.title || "Untitled Trace"}
                                         </div>
-                                        <div className="text-[10px] opacity-40 tabular-nums">
+                                        <div className="text-xs tabular-nums">
                                             {trace.id}
                                         </div>
-                                        <div className="text-[9px] text-red-400/60 flex items-center gap-1 mt-1">
+                                        <div className="text-xs text-error flex items-center gap-1 mt-1">
                                             <Clock className="w-3 h-3" />
                                             Deleted {new Date(trace.deleted_at).toLocaleString()}
                                         </div>
@@ -163,7 +163,7 @@ export default function TrashPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="text-[10px] font-mono border-green-500/20 text-green-400 hover:bg-green-500/5"
+                                            className="text-xs font-mono border-border text-success hover:bg-secondary"
                                             onClick={() => handleRestore(trace)}
                                             disabled={actionLoading === trace.id}
                                         >
@@ -173,7 +173,7 @@ export default function TrashPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="text-[10px] font-mono border-red-500/20 text-red-400 hover:bg-red-500/5"
+                                            className="text-xs font-mono border-border text-error hover:bg-secondary"
                                             onClick={() => {
                                                 setDeleteTarget(trace);
                                                 setDeleteDialogOpen(true);
@@ -195,7 +195,7 @@ export default function TrashPage() {
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                 <DialogContent className="sm:max-w-[400px]">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-red-400">
+                        <DialogTitle className="flex items-center gap-2 text-error">
                             <AlertTriangle className="w-5 h-5" />
                             Permanently Delete?
                         </DialogTitle>
@@ -203,9 +203,9 @@ export default function TrashPage() {
                             This action cannot be undone. The trace, all its events, branches, and storage files will be permanently removed.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="mt-2 p-3 bg-red-500/5 rounded-lg border border-red-500/20">
-                        <div className="font-mono text-xs font-bold text-red-300">{deleteTarget?.title || deleteTarget?.metadata?.title || "Untitled Trace"}</div>
-                        <div className="font-mono text-[10px] opacity-40 mt-1">{deleteTarget?.id}</div>
+                    <div className="mt-2 p-3 bg-secondary rounded-lg border border-border">
+                        <div className="font-mono text-xs font-bold text-foreground">{deleteTarget?.title || deleteTarget?.metadata?.title || "Untitled Trace"}</div>
+                        <div className="font-mono text-xs text-muted-foreground mt-1">{deleteTarget?.id}</div>
                     </div>
                     <DialogFooter className="mt-4">
                         <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>

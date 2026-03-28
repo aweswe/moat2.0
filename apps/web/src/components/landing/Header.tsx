@@ -36,7 +36,7 @@ export const Header = () => {
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-sm bg-foreground/5 border border-foreground/10 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-foreground/5 border border-foreground/10 flex items-center justify-center">
               <AgentTraceLogo size={18} className="text-foreground" />
             </div>
             <span className="font-semibold text-lg tracking-tight text-foreground">
@@ -47,25 +47,36 @@ export const Header = () => {
           {/* Navigation */}
           <nav className="hidden md:flex items-center gap-8">
             <Link
+              href="/#problem"
+              onClick={(e) => scrollToSection(e, "problem")}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              The Problem
+            </Link>
+            <Link
               href="/#how-it-works"
               onClick={(e) => scrollToSection(e, "how-it-works")}
-              className="text-[15px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               How it works
             </Link>
             <Link
-              href="/#capabilities"
-              onClick={(e) => scrollToSection(e, "capabilities")}
-              className="text-[15px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+              href="/#features"
+              onClick={(e) => scrollToSection(e, "features")}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
-              Capabilities
+              Features
             </Link>
-            <Link href="/docs" className="text-[15px] font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              href="/docs"
+              className={`text-sm font-medium transition-colors ${pathname.startsWith('/docs') ? 'text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+            >
               Docs
             </Link>
             <Link
-              href="/pricing"
-              className={`text-[15px] font-medium transition-colors ${isPricing ? 'text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+              href="/#pricing"
+              onClick={(e) => scrollToSection(e, "pricing")}
+              className={`text-sm font-medium transition-colors ${isPricing ? 'text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Pricing
             </Link>
@@ -98,7 +109,7 @@ export const Header = () => {
                 <SheetContent side="right" className="w-[80vw] sm:w-[350px]">
                   <div className="flex flex-col gap-8 mt-8">
                     <Link href="/" className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-sm bg-foreground/5 border border-foreground/10 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-xl bg-foreground/5 border border-foreground/10 flex items-center justify-center">
                         <AgentTraceLogo size={18} className="text-foreground" />
                       </div>
                       <span className="font-semibold text-lg tracking-tight text-foreground">
@@ -120,7 +131,10 @@ export const Header = () => {
                       >
                         Capabilities
                       </Link>
-                      <Link href="/docs" className="text-lg font-medium text-muted-foreground hover:text-foreground transition-colors">
+                      <Link 
+                        href="/docs" 
+                        className={`text-lg transition-colors ${pathname.startsWith('/docs') ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
                         Docs
                       </Link>
                       <Link href="/pricing" className="text-lg font-medium text-muted-foreground hover:text-foreground transition-colors">

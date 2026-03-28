@@ -408,6 +408,12 @@ def execute_replay(req: ExecuteReplayRequest):
             )
 
         sandbox_env = os.environ.copy()
+        print(f"[Execution Engine] Sandbox Environment Keys: {list(sandbox_env.keys())}")
+        if "GROQ_API_KEY" in sandbox_env:
+            print("[Execution Engine] GROQ_API_KEY found in environment.")
+        else:
+            print("[Execution Engine] WARNING: GROQ_API_KEY NOT FOUND in environment.")
+
         sandbox_env.update({
             "AGENTTRACE_MODE": "replay",
             "AGENTTRACE_GOVERNANCE_LEVEL": effective_gov_level,

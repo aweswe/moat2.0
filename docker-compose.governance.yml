@@ -7,7 +7,9 @@ services:
     volumes:
       - ./traces:/traces        # Input trace to mount and output result path to write to
     environment:
-      - AGENTTRACE_SIGNING_KEY  # Passed explicitly from the host OS environment at strictly runtime securely
+      - AGENTTRACE_SIGNING_KEY
+      - GROQ_API_KEY
+      - OPENAI_API_KEY
     security_opt:
       - no-new-privileges:true
     cap_drop:

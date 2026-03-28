@@ -24,9 +24,9 @@ export const Footer = () => {
           <div className="flex flex-col gap-4">
             <h3 className="font-semibold text-foreground">Company</h3>
             <a href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">About</a>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Careers</a>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Press</a>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Partners</a>
+            <span className="text-sm text-muted-foreground/50">Careers (soon)</span>
+            <span className="text-sm text-muted-foreground/50">Press (soon)</span>
+            <span className="text-sm text-muted-foreground/50">Partners (soon)</span>
           </div>
 
           {/* Product Column */}
@@ -45,14 +45,14 @@ export const Footer = () => {
             <a href="/compare/agenttrace-vs-langsmith" className="text-sm text-muted-foreground hover:text-foreground transition-colors">AgentTrace vs LangSmith</a>
             <a href="/compare/agenttrace-vs-replay" className="text-sm text-muted-foreground hover:text-foreground transition-colors">AgentTrace vs Replay.io</a>
             <a href="/compare/agenttrace-vs-logs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">AgentTrace vs Logs</a>
-            <a href="/compare" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium text-brand">Compare all →</a>
+            <a href="/compare" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium text-[hsl(var(--brand))]">Compare all →</a>
           </div>
 
           {/* Social / Legal */}
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-6 h-6 rounded-sm bg-primary/20 border border-primary/30 flex items-center justify-center">
-                <div className="w-2 h-2 bg-primary rounded-sm" />
+              <div className="w-6 h-6 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center">
+                <div className="w-2 h-2 bg-primary rounded-xl" />
               </div>
               <span className="font-medium text-sm text-foreground">AgentTrace</span>
             </div>

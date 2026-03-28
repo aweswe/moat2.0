@@ -62,8 +62,8 @@ function InviteDialog({ open, onClose, onInvite }: InviteDialogProps) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-            <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-background/90 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+            <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold">Invite Team Member</h3>
                     <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -73,16 +73,16 @@ function InviteDialog({ open, onClose, onInvite }: InviteDialogProps) {
 
                 {result ? (
                     <div className="space-y-4">
-                        <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
-                            <Check className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                            <p className="text-sm font-semibold text-green-400">Invite sent!</p>
+                        <div className="p-4 rounded-lg bg-secondary border border-border text-center">
+                            <Check className="w-8 h-8 text-success mx-auto mb-2" />
+                            <p className="text-sm font-semibold text-success">Invite sent!</p>
                             {result.emailSent && (
                                 <p className="text-xs text-muted-foreground mt-1">Email delivered to {email}</p>
                             )}
                         </div>
                         {result.inviteLink && (
                             <div className="space-y-2">
-                                <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Shareable Link</label>
+                                <label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Shareable Link</label>
                                 <div className="flex gap-2">
                                     <input
                                         readOnly
@@ -100,7 +100,7 @@ function InviteDialog({ open, onClose, onInvite }: InviteDialogProps) {
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {error && (
-                            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono">
+                            <div className="p-3 rounded-lg bg-error/10 border border-error/20 text-error text-xs font-mono">
                                 {error}
                             </div>
                         )}
@@ -123,10 +123,10 @@ function InviteDialog({ open, onClose, onInvite }: InviteDialogProps) {
                                 <button
                                     type="button"
                                     onClick={() => setRole("dev")}
-                                    className={`p-3 rounded-lg border text-left transition-all ${role === "dev"
-                                        ? "border-brand bg-brand/10 text-foreground"
-                                        : "border-border bg-background text-muted-foreground hover:border-white/20"
-                                        }`}
+                                className={`p-3 rounded-lg border text-left transition-all ${role === "dev"
+                                    ? "border-brand bg-brand/10 text-foreground"
+                                    : "border-border bg-background text-muted-foreground hover:border-border"
+                                    }`}
                                 >
                                     <div className="text-xs font-bold uppercase">Dev</div>
                                     <div className="text-[10px] opacity-60 mt-0.5">Can fork & branch</div>
@@ -134,10 +134,10 @@ function InviteDialog({ open, onClose, onInvite }: InviteDialogProps) {
                                 <button
                                     type="button"
                                     onClick={() => setRole("viewer")}
-                                    className={`p-3 rounded-lg border text-left transition-all ${role === "viewer"
-                                        ? "border-brand bg-brand/10 text-foreground"
-                                        : "border-border bg-background text-muted-foreground hover:border-white/20"
-                                        }`}
+                                className={`p-3 rounded-lg border text-left transition-all ${role === "viewer"
+                                    ? "border-brand bg-brand/10 text-foreground"
+                                    : "border-border bg-background text-muted-foreground hover:border-border"
+                                    }`}
                                 >
                                     <div className="text-xs font-bold uppercase">Viewer</div>
                                     <div className="text-[10px] opacity-60 mt-0.5">Read-only access</div>
@@ -275,9 +275,9 @@ export default function TeamPage() {
                 </div>
 
                 {members.map((member) => (
-                    <div key={member.id} className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-6 py-4 border-b border-border/50 hover:bg-white/[0.02] transition-colors items-center">
+                    <div key={member.id} className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-6 py-4 border-b border-border/50 hover:bg-secondary/30 transition-colors items-center">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-brand/10 border border-brand/30 flex items-center justify-center text-xs font-bold text-brand uppercase">
+                            <div className="w-8 h-8 rounded-full bg-brand/10 border border-brand/20 flex items-center justify-center text-xs font-bold text-brand uppercase">
                                 {(member.display_name || member.email || '?')[0]}
                             </div>
                             <div>
@@ -287,10 +287,8 @@ export default function TeamPage() {
                         </div>
                         <div>
                             <span className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded border ${member.role === 'owner'
-                                    ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-                                    : member.role === 'dev'
-                                        ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
-                                        : 'text-gray-400 bg-gray-500/10 border-gray-500/20'
+                                    ? 'text-brand bg-brand/10 border-brand/20'
+                                    : 'text-muted-foreground bg-secondary border-border'
                                 }`}>
                                 {member.role}
                             </span>
@@ -304,19 +302,19 @@ export default function TeamPage() {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="text-muted-foreground hover:text-white h-7 w-7"
+                                        className="text-muted-foreground hover:text-foreground h-7 w-7"
                                         onClick={() => setMenuOpen(menuOpen === member.id ? null : member.id)}
                                     >
                                         <MoreVertical className="w-4 h-4" />
                                     </Button>
 
                                     {menuOpen === member.id && (
-                                        <div className="absolute right-0 top-8 bg-card border border-border rounded-lg shadow-xl z-10 py-1 min-w-[140px]">
+                                        <div className="absolute right-0 top-8 bg-card border border-border rounded-lg shadow-none z-10 py-1 min-w-[140px]">
                                             {['owner', 'dev', 'viewer'].filter(r => r !== member.role).map(r => (
                                                 <button
                                                     key={r}
                                                     onClick={() => handleRoleChange(member.id, r)}
-                                                    className="w-full text-left px-3 py-1.5 text-xs font-mono uppercase hover:bg-white/5 transition-colors"
+                                                    className="w-full text-left px-3 py-1.5 text-xs font-mono uppercase hover:bg-secondary transition-colors"
                                                 >
                                                     Make {r}
                                                 </button>
@@ -324,7 +322,7 @@ export default function TeamPage() {
                                             <div className="border-t border-border my-1" />
                                             <button
                                                 onClick={() => handleRemove(member.id)}
-                                                className="w-full text-left px-3 py-1.5 text-xs font-mono uppercase text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+                                                className="w-full text-left px-3 py-1.5 text-xs font-mono uppercase text-error hover:bg-error/10 transition-colors flex items-center gap-2"
                                             >
                                                 <Trash2 className="w-3 h-3" /> Remove
                                             </button>

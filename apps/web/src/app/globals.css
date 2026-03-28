@@ -7,36 +7,35 @@
 @layer base {
   :root {
     /* ─── Light Mode ─────────────────────────────────── */
-    /* Kinso inspired: warmer off-white background, softer dark text */
-    --background: 30 20% 98%;
-    --foreground: 220 20% 12%;
+    --background: 0 0% 99%;         /* near-white */
+    --foreground: 220 20% 8%;       /* almost-black ink */
 
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 12%;
+    --card-foreground: 220 20% 8%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 12%;
+    --popover-foreground: 220 20% 8%;
 
-    --panel: 30 15% 96%;
-    --panel-foreground: 220 20% 12%;
+    --panel: 220 14% 96%;
+    --panel-foreground: 220 20% 8%;
 
-    --primary: 220 20% 12%;
+    --primary: 220 20% 8%;         /* ink black — for primary buttons */
     --primary-foreground: 0 0% 100%;
     --primary-glow: 220 20% 12% / 0.08;
 
-    --secondary: 30 10% 92%;
-    --secondary-foreground: 220 20% 12%;
+    --secondary: 220 14% 93%;       /* cool light grey — for secondary surfaces */
+    --secondary-foreground: 220 20% 8%;
 
-    --muted: 30 10% 94%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 220 14% 95%;           /* very light grey */
+    --muted-foreground: 220 12% 40%; /* clearly readable grey text */
 
-    --accent: 30 15% 90%;
-    --accent-foreground: 220 20% 12%;
+    --accent: 239 40% 93%;          /* light indigo tint — same purple family as dark mode */
+    --accent-foreground: 239 50% 30%; /* dark indigo text on accent surface */
 
     /* Brand – Steel Blue */
-    --brand: 207 70% 45%;
+    --brand: 221 83% 53%;           /* #3B82F6 — vivid blue */
     --brand-foreground: 0 0% 100%;
-    --brand-glow: 207 70% 45% / 0.4;
+    --brand-glow: 221 83% 53% / 0.3;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
@@ -50,79 +49,84 @@
     --fork: 220 20% 8%;
     --fork-foreground: 0 0% 100%;
 
-    /* Borders – clearly visible in light mode */
-    --border: 220 14% 84%;
-    --input: 220 14% 84%;
-    --ring: 207 70% 45%;
+    /* Borders — visible but subtle in light mode */
+    --border: 220 14% 88%;
+    --input: 220 14% 88%;
+    --ring: 221 83% 53%;
 
     --radius: 0.6rem;
 
     /* Sidebar */
-    --sidebar-background: 0 0% 99%;
-    --sidebar-foreground: 220 10% 30%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 12% 30%;
     --sidebar-primary: 220 20% 8%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 14% 93%;
     --sidebar-accent-foreground: 220 20% 8%;
     --sidebar-border: 220 14% 88%;
-    --sidebar-ring: 207 70% 45%;
+    --sidebar-ring: 221 83% 53%;
   }
 
   .dark {
-    /* ─── Dark Mode ─────────────────────────────────── */
-    --background: 224 10% 5%;
-    --foreground: 210 20% 95%;
+    /* ─── Dark Mode (AgentTrace Governance Layer) ─────────────────── */
+    --background: 0 0% 4%;     /* #0A0A0A */
+    --foreground: 0 0% 92%;    /* #EAEAEA */
 
-    --card: 224 10% 7%;
-    --card-foreground: 210 20% 95%;
+    --card: 0 0% 7%;           /* #111111 */
+    --card-foreground: 0 0% 92%;
 
-    --popover: 224 10% 7%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 92%;
 
-    --panel: 224 10% 9%;
-    --panel-foreground: 210 20% 95%;
+    --panel: 0 0% 7%;
+    --panel-foreground: 0 0% 92%;
 
-    --primary: 210 20% 95%;
-    --primary-foreground: 224 10% 5%;
-    --primary-glow: 210 20% 95% / 0.12;
+    --primary: 0 0% 92%;
+    --primary-foreground: 0 0% 4%;
+    --primary-glow: 0 0% 0% / 0; /* NO GLOW */
 
-    --secondary: 224 10% 12%;
-    --secondary-foreground: 210 20% 95%;
+    --secondary: 0 0% 7%;
+    --secondary-foreground: 0 0% 92%;
 
-    --muted: 224 10% 12%;
-    --muted-foreground: 215 12% 55%;
+    --muted: 0 0% 7%;
+    --muted-foreground: 218 11% 65%; /* #9CA3AF */
 
-    --accent: 224 10% 15%;
-    --accent-foreground: 210 20% 95%;
+    --accent: 239 84% 67%;     /* #6366F1 */
+    --accent-foreground: 0 0% 100%;
 
-    --brand: 207 70% 55%;
+    --brand: 239 84% 67%;      /* #6366F1 */
     --brand-foreground: 0 0% 100%;
-    --brand-glow: 207 70% 55% / 0.4;
+    --brand-glow: 0 0% 0% / 0;  /* NO GLOW */
 
-    --destructive: 0 62% 55%;
+    --destructive: 0 84% 60%;  /* #EF4444 - using brand error color */
     --destructive-foreground: 0 0% 98%;
 
-    --success: 142 60% 45%;
+    --success: 142 71% 45%;    /* #22C55E */
     --success-foreground: 0 0% 98%;
 
-    --warning: 38 85% 55%;
+    --warning: 38 92% 50%;
     --warning-foreground: 0 0% 98%;
 
-    --fork: 210 20% 95%;
-    --fork-foreground: 224 10% 5%;
+    --fork: 0 0% 92%;
+    --fork-foreground: 0 0% 4%;
 
-    --border: 224 8% 15%;
-    --input: 224 8% 15%;
-    --ring: 207 70% 55%;
+    --border: 0 0% 12%;        /* #1F1F1F */
+    --input: 0 0% 12%;
+    --ring: 239 84% 67%;
 
-    --sidebar-background: 224 10% 4%;
-    --sidebar-foreground: 215 12% 55%;
-    --sidebar-primary: 210 20% 95%;
-    --sidebar-primary-foreground: 224 10% 5%;
-    --sidebar-accent: 224 10% 10%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 224 8% 12%;
-    --sidebar-ring: 207 70% 55%;
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 218 11% 65%;
+    --sidebar-primary: 0 0% 92%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 7%;
+    --sidebar-accent-foreground: 0 0% 92%;
+    --sidebar-border: 0 0% 12%;
+    --sidebar-ring: 239 84% 67%;
+
+    /* Layout Rhythm Variables */
+    --at-section-gap: 32px;
+    --at-card-gap: 16px;
+    --at-card-padding: 16px;
   }
 }
 
@@ -140,7 +144,7 @@
     /* Use Inter sans-serif as the base reading font, NOT mono */
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     @apply bg-background text-foreground antialiased;
-    font-size: 15px;
+    font-size: 15px; /* Within 14-16 range */
     line-height: 1.6;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -189,43 +193,6 @@
 }
 
 @layer utilities {
-
-  /* Glows */
-  .glow-brand {
-    box-shadow: 0 0 20px hsl(var(--brand) / 0.3), 0 0 60px hsl(var(--brand) / 0.1);
-  }
-
-  .glow-primary {
-    box-shadow: 0 0 20px hsl(var(--primary) / 0.2);
-  }
-
-  .glow-success {
-    box-shadow: 0 0 12px hsl(var(--success) / 0.4);
-  }
-
-  .glow-destructive {
-    box-shadow: 0 0 12px hsl(var(--destructive) / 0.4);
-  }
-
-  .glow-fork {
-    box-shadow: 0 0 20px hsl(var(--fork) / 0.3);
-  }
-
-  /* Text gradients */
-  .text-gradient-brand {
-    background: linear-gradient(135deg, hsl(var(--brand)) 0%, hsl(195 80% 65%) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-primary {
-    background: linear-gradient(135deg, hsl(var(--foreground)) 0%, hsl(var(--muted-foreground)) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
   /* Subtle grid */
   .grid-pattern {
     background-image:
@@ -270,7 +237,7 @@
     @apply border-primary bg-primary/20;
   }
 
-  /* Glass effect */
+  /* Glass effect (Deprecated - minimal usage) */
   .glass {
     backdrop-filter: blur(12px) saturate(180%);
     background: hsl(var(--card) / 0.7);
@@ -280,5 +247,20 @@
   /* Pulse animation */
   .animate-pulse-slow {
     animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes ticker-left {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  @keyframes ticker-right {
+    0%   { transform: translateX(-50%); }
+    100% { transform: translateX(0); }
   }
 }

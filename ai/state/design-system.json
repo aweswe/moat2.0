@@ -1,16 +1,67 @@
 {
   "theme": "AgentTrace",
+  "version": "2.0.1",
   "style": "deterministic, minimal, system-like",
   "colors": {
-    "bg-primary": "#0A0A0A",
-    "bg-secondary": "#111111",
-    "border": "#1F1F1F",
-    "accent": "#6366F1"
+    "bg-primary": "var(--background)",
+    "bg-secondary": "var(--secondary)",
+    "bg-card": "var(--card)",
+    "border": "var(--border)",
+    "accent": "var(--brand)",
+    "success": "var(--success)",
+    "error": "var(--destructive)"
+  },
+  "status": {
+    "completed": { "dot": "bg-success", "text": "text-success" },
+    "ready": { "dot": "bg-success", "text": "text-success" },
+    "failed": { "dot": "bg-destructive", "text": "text-destructive" },
+    "running": { "dot": "bg-accent", "text": "text-accent" },
+    "queued": { "dot": "bg-muted-foreground", "text": "text-muted-foreground" }
+  },
+  "interactions": {
+    "hover": "bg-secondary",
+    "focus": "outline-accent",
+    "active": "opacity-90",
+    "disabled": "opacity-50 pointer-events-none"
+  },
+  "typography": {
+    "hero": "40-56px / 600",
+    "section": "20-24px / 500",
+    "body": "14-16px / 400",
+    "meta": "12px / 400",
+    "body-min": "14px",
+    "forbidden": ["11px", "13px"]
+  },
+  "spacing": {
+    "section-gap": "var(--at-section-gap)",
+    "card-gap": "var(--at-card-gap)",
+    "card-padding": "var(--at-card-padding)",
+    "grid": "8px"
+  },
+  "density": {
+    "max-hierarchy-levels": 3,
+    "max-table-columns": 6,
+    "long-text": "truncate"
+  },
+  "surface": {
+    "card": "bg-card border border-border rounded-xl p-4",
+    "no-shadows": true,
+    "no-variants": true
+  },
+  "className-contract": {
+    "allowed": ["margin", "width", "height", "flex", "grid", "visibility"],
+    "forbidden": ["background", "border", "padding", "radius", "color", "font-size"]
   },
   "rules": [
     "no gradients",
     "no shadows",
+    "no glow",
+    "no arbitrary hex values",
     "8px grid",
-    "consistent cards"
+    "consistent cards",
+    "16px card padding",
+    "32px section gap",
+    "one visual style per primitive",
+    "all new UI must pass pipeline"
   ]
 }

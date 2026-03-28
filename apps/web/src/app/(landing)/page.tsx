@@ -1,34 +1,34 @@
+import React from "react";
 import { HeroSection } from "@/components/landing/HeroSection";
-import { FinalCTASection } from "@/components/landing/FinalCTASection";
-import { FeatureShowcase } from "@/components/landing/FeatureShowcase";
-import { DarkFeatureBlock } from "@/components/landing/DarkFeatureBlock";
-import { IntegrationsCarousel } from "@/components/landing/IntegrationsCarousel";
-import { ComparisonTableSection } from "@/components/landing/ComparisonTableSection";
-import { FAQSection } from "@/components/landing/FAQSection";
+import { WorkflowSection } from "@/components/landing/WorkflowSection";
+import { ProblemSection } from "@/components/landing/ProblemSection";
+import { DemoSection } from "@/components/landing/DemoSection";
+import { DetectionTicker } from "@/components/landing/DetectionTicker";
+import { CapabilitiesSection } from "@/components/landing/CapabilitiesSection";
+import { StatsSection, CTASection } from "@/components/landing/StatsAndCTA";
 
+/**
+ * Narrative order:
+ * 1. HOOK       — "Your agent ran. What did it do?"
+ * 2. PAIN       — The debugging loop from hell (relatable, cynical)
+ * 3. CONTRAST   — Before/After: log chaos vs execution graph
+ * 4. PROOF      — Interactive trace viewer (click through it yourself)
+ * 5. SOCIAL     — Live detection ticker (specific anomalies, not features)
+ * 6. SOLUTION   — Record / Replay / Branch (what you get)
+ * 7. NUMBERS    — < 5ms / 100% / 3 LOC
+ * 8. ACTION     — "Stop guessing. Start knowing."
+ */
 export default function LandingPage() {
-    return (
-        <div className="flex flex-col w-full">
-            {/* 1. Hero — Minimal, floating UI */}
-            <HeroSection />
-
-            {/* 2. Integrations Scroller */}
-            <IntegrationsCarousel />
-
-            {/* 3. Competitor Comparison Table */}
-            <ComparisonTableSection />
-
-            {/* 4. Core Features — Alternating layout */}
-            <FeatureShowcase />
-
-            {/* 5. The 2AM Failure — High contrast dark section */}
-            <DarkFeatureBlock />
-
-            {/* 6. FAQ Section - Dark Accordions */}
-            <FAQSection />
-
-            {/* 7. Final CTA */}
-            <FinalCTASection />
-        </div>
-    );
+  return (
+    <div className="flex flex-col w-full bg-background min-h-screen">
+      <HeroSection />
+      <WorkflowSection />
+      <ProblemSection />
+      <DemoSection />
+      <DetectionTicker />
+      <CapabilitiesSection />
+      <StatsSection />
+      <CTASection />
+    </div>
+  );
 }

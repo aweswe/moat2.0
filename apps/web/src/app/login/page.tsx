@@ -69,12 +69,12 @@ export default function LoginPage() {
 
                 <div className="relative z-10">
                     <p className="text-[11px] uppercase tracking-[0.15em] text-white/30 font-semibold mb-5">
-                        Trusted by
+                        Status
                     </p>
                     <div className="flex items-center gap-8 text-white/40">
-                        <span className="text-[15px] font-semibold tracking-tight">12 engineers</span>
+                        <span className="text-[15px] font-semibold tracking-tight">Early Access Preview</span>
                         <span className="text-white/10">|</span>
-                        <span className="text-[13px] text-white/30">Since February 2026</span>
+                        <span className="text-[13px] text-white/30">Admitting developers</span>
                     </div>
                 </div>
             </div>

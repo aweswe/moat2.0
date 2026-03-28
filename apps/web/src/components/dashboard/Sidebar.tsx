@@ -54,34 +54,34 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
             {/* Mobile Backdrop */}
             {mobileOpen && (
                 <div
-                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
+                    className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
                     onClick={onMobileClose}
                 />
             )}
 
             <div className={cn(
-                "fixed inset-y-0 left-0 z-50 flex h-[100dvh] flex-col border-r border-border/60 bg-muted/40 transition-transform duration-300 md:relative md:translate-x-0",
-                collapsed ? "md:w-14" : "md:w-60 w-[280px]",
+                "fixed inset-y-0 left-0 z-50 flex h-[100dvh] flex-col border-r border-border bg-card transition-transform duration-300 md:relative md:translate-x-0",
+                collapsed ? "md:w-16" : "md:w-64 w-[280px]",
                 mobileOpen ? "translate-x-0" : "-translate-x-full"
             )}>
                 {/* Header: Logo + Toggle */}
                 <div className={cn(
-                    "flex h-14 items-center border-b border-border/30",
+                    "flex h-12 items-center border-b border-border",
                     collapsed ? "justify-center px-2" : "justify-between px-4"
                 )}>
                     {collapsed ? (
                         <button
                             onClick={onToggle}
-                            className="flex items-center justify-center w-8 h-8 rounded hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-colors"
+                            className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                             title="Expand sidebar"
                         >
                             <PanelLeftOpen className="w-4 h-4" />
                         </button>
                     ) : (
                         <>
-                            <Link href="/" className="flex items-center gap-2 group min-w-0">
-                                <div className="w-7 h-7 rounded bg-foreground/10 flex items-center justify-center shrink-0">
-                                    <AgentTraceLogo size={16} className="text-foreground" />
+                            <Link href="/" className="flex items-center gap-3 group min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-foreground/5 flex items-center justify-center shrink-0">
+                                    <AgentTraceLogo size={18} className="text-foreground" />
                                 </div>
                                 <span className="font-semibold text-[15px] tracking-tight text-foreground truncate">
                                     AgentTrace
@@ -89,7 +89,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                             </Link>
                             <button
                                 onClick={onToggle}
-                                className="flex items-center justify-center w-7 h-7 rounded hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-colors shrink-0"
+                                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors shrink-0"
                                 title="Collapse sidebar"
                             >
                                 <PanelLeftClose className="w-4 h-4" />
@@ -99,7 +99,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                 </div>
 
                 {/* Nav */}
-                <nav className={cn("flex-1 space-y-0.5 py-3", collapsed ? "px-1.5" : "px-3")}>
+                <nav className={cn("flex-1 space-y-1 py-4", collapsed ? "px-2" : "px-4")}>
                     {navigation.map((item) => {
                         const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
                         return (
@@ -108,13 +108,13 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                                 href={item.href}
                                 title={collapsed ? item.name : undefined}
                                 className={cn(
-                                    "group flex items-center rounded-md transition-colors",
+                                    "group flex items-center rounded-lg transition-colors",
                                     collapsed
-                                        ? "justify-center px-0 py-2"
-                                        : "gap-2.5 px-2.5 py-1.5 text-[13px] font-medium",
+                                        ? "justify-center px-0 py-2.5"
+                                        : "gap-3 px-3 py-2 text-sm font-medium",
                                     isActive
-                                        ? "bg-accent text-foreground"
-                                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                                        ? "bg-secondary text-foreground"
+                                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                                 )}
                             >
                                 <item.icon className={cn(
@@ -128,13 +128,13 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                 </nav>
 
                 {/* Bottom: Docs + User Profile */}
-                <div className={cn("border-t border-border/40", collapsed ? "px-1.5 py-2 space-y-1" : "px-3 py-3 space-y-1")}>
+                <div className={cn("border-t border-border py-4", collapsed ? "px-2 space-y-2" : "px-4 space-y-2")}>
                     <Link
                         href="/docs"
                         title={collapsed ? "Documentation" : undefined}
                         className={cn(
-                            "flex items-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
-                            collapsed ? "justify-center py-2" : "gap-2.5 px-2.5 py-1.5 text-[13px] font-medium"
+                            "flex items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors",
+                            collapsed ? "justify-center py-2.5" : "gap-3 px-3 py-2 text-sm font-medium"
                         )}
                     >
                         <HelpCircle className="w-4 h-4 text-muted-foreground/60 shrink-0" />
@@ -146,16 +146,16 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={cn(
-                                    "flex items-center rounded-md w-full text-left hover:bg-accent/50 transition-colors",
-                                    collapsed ? "justify-center py-2" : "gap-2.5 px-2.5 py-1.5"
+                                    "flex items-center rounded-lg w-full text-left hover:bg-secondary transition-colors",
+                                    collapsed ? "justify-center py-2.5" : "gap-3 px-3 py-2"
                                 )}
                             >
-                                <div className="w-6 h-6 rounded-full bg-brand/15 text-brand flex items-center justify-center shrink-0 text-[10px] font-bold">
+                                <div className="w-6 h-6 rounded-full bg-accent/10 text-accent flex items-center justify-center shrink-0 text-[10px] font-bold">
                                     {initials}
                                 </div>
                                 {!collapsed && (
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-[13px] font-medium text-foreground truncate">{user?.name || "User"}</p>
+                                        <p className="text-sm font-medium text-foreground truncate">{user?.name || "User"}</p>
                                         <p className="text-[10px] text-muted-foreground truncate">{user?.email}</p>
                                     </div>
                                 )}
