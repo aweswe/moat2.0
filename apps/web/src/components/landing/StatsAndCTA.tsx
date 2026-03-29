@@ -96,7 +96,7 @@ export function CTASection() {
           )}
         >
           <Link href="/signup">
-            <button className="inline-flex items-center gap-2 px-10 py-4 bg-background text-foreground text-sm font-bold rounded-xl hover:opacity-90 transition-opacity">
+            <button className="inline-flex items-center gap-2 px-10 py-4 bg-background text-foreground text-sm font-bold rounded-xl border border-transparent hover:bg-brand hover:text-brand-foreground hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all">
               Get started free
               <ArrowRight className="w-4 h-4" />
             </button>

@@ -91,14 +91,14 @@ export default function DashboardPage() {
     };
 
     return (
-        <div className="space-y-section py-4">
+        <div className="max-w-7xl mx-auto w-full space-y-12 py-6 px-4">
 
             {/* ─── Greeting ─────────────────────────────── */}
-            <div className="space-y-1">
+            <div className="flex flex-col gap-3">
                 <p className="text-sm text-muted-foreground font-medium">
                     {greeting()}, {user?.name?.split(" ")[0] || "there"}
                 </p>
-                <h1 className="text-4xl font-bold tracking-tight text-foreground">AgentTrace</h1>
+                <h1 className="text-4xl font-bold tracking-tight text-foreground leading-[1.2]">AgentTrace</h1>
                 <p className="text-sm text-muted-foreground/80">
                     Trace and replay AI agent executions.
                 </p>
@@ -119,12 +119,12 @@ export default function DashboardPage() {
                             <X className="w-4 h-4" />
                         </button>
                     </div>
-                    <div className="grid gap-card sm:grid-cols-3">
+                    <div className="grid gap-6 sm:grid-cols-3">
                         {[
                             {
                                 title: "Quickstart Guide",
                                 desc: "Install SDK and capture your first execution.",
-                                href: "/docs/quickstart",
+                                href: "/docs/getting-started",
                                 icon: Terminal,
                             },
                             {
@@ -139,23 +139,31 @@ export default function DashboardPage() {
                                 href: "/docs/branching",
                                 icon: GitFork,
                             },
-                        ].map((card) => (
-                            <Link key={card.title} href={card.href} className="group">
-                                <SystemCard className="h-full relative hover:border-accent/40 transition-all flex flex-col justify-between">
-                                    <div>
-                                        <h3 className="text-sm font-semibold mb-1 group-hover:text-accent transition-colors">
-                                            {card.title}
-                                        </h3>
-                                        <p className="text-xs text-muted-foreground leading-relaxed">
-                                            {card.desc}
-                                        </p>
+                        ].map((card) => {
+                            const Icon = card.icon;
+                            return (
+                                <Link key={card.title} href={card.href} className="group outline-none">
+                                    <div className="h-full relative bg-card border border-border rounded-2xl p-6 transition-all duration-300 hover:border-brand/40 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgba(99,102,241,0.07)] hover:-translate-y-0.5 flex flex-col justify-between">
+                                        <div>
+                                            {/* Premium Icon Treatment */}
+                                            <div className="w-10 h-10 rounded-xl bg-brand/10 border border-brand/20 flex items-center justify-center mb-5 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
+                                                <Icon className="w-5 h-5 text-brand" />
+                                            </div>
+                                            
+                                            <h3 className="text-base font-semibold text-foreground tracking-tight mb-2 group-hover:text-brand transition-colors">
+                                                {card.title}
+                                            </h3>
+                                            <p className="text-sm text-muted-foreground leading-relaxed pr-4">
+                                                {card.desc}
+                                            </p>
+                                        </div>
+                                        <div className="pt-6 flex justify-end opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                                            <ArrowRight className="w-4 h-4 text-brand" />
+                                        </div>
                                     </div>
-                                    <div className="pt-4 flex justify-end">
-                                        <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground/20 group-hover:text-accent transition-colors" />
-                                    </div>
-                                </SystemCard>
-                            </Link>
-                        ))}
+                                </Link>
+                            );
+                        })}
                     </div>
                 </section>
             ) : (

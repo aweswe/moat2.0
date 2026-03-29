@@ -99,11 +99,11 @@ export function HeroSection() {
             animation: revealed ? "fadeUp 0.8s ease forwards 0.35s" : "none",
           }}
         >
-          <h1 className="text-[clamp(52px,7.5vw,104px)] font-bold leading-[1.0] tracking-tight text-foreground">
+          <h1 className="text-[clamp(52px,7.5vw,104px)] font-bold leading-[1.1] tracking-tight text-foreground">
             Your agent ran.
           </h1>
-          <h1 className="text-[clamp(52px,7.5vw,104px)] font-bold leading-[1.0] tracking-tight text-muted-foreground mt-1 min-h-[1.2em]">
-            <span key={wordIndex} style={{ animation: "fadeUp 0.5s ease forwards" }}>
+          <h1 className="text-[clamp(52px,7.5vw,104px)] font-bold leading-[1.1] tracking-tight text-brand mt-2 min-h-[1.2em]">
+            <span key={wordIndex} className="inline-block drop-shadow-sm" style={{ animation: "fadeUp 0.5s ease forwards" }}>
               {HEADLINE_WORDS[wordIndex]}
             </span>
           </h1>
@@ -127,7 +127,7 @@ export function HeroSection() {
           }}
         >
           <Link href="/signup">
-            <button className="inline-flex items-center gap-2 px-8 py-4 bg-foreground text-background text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity">
+            <button className="inline-flex items-center gap-2 px-8 py-4 bg-foreground text-background text-sm font-semibold rounded-xl border border-transparent hover:bg-brand hover:text-brand-foreground hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all">
               Start for free
               <ArrowRight className="w-4 h-4" />
             </button>

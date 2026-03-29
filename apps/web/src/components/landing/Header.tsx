@@ -93,7 +93,7 @@ export const Header = () => {
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button size="sm">Get Started</Button>
+                <Button size="sm" className="hover:bg-brand hover:text-brand-foreground hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all">Get Started</Button>
               </Link>
             </div>
             <div className="md:hidden flex items-center gap-2">

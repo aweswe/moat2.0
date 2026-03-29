@@ -32,10 +32,10 @@
     --accent: 239 40% 93%;          /* light indigo tint — same purple family as dark mode */
     --accent-foreground: 239 50% 30%; /* dark indigo text on accent surface */
 
-    /* Brand – Steel Blue */
-    --brand: 221 83% 53%;           /* #3B82F6 — vivid blue */
+    /* Brand – Indigo/Purple to match dark mode */
+    --brand: 239 84% 67%;           /* #6366F1 — vivid purple */
     --brand-foreground: 0 0% 100%;
-    --brand-glow: 221 83% 53% / 0.3;
+    --brand-glow: 239 84% 67% / 0.3;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
@@ -52,7 +52,7 @@
     /* Borders — visible but subtle in light mode */
     --border: 220 14% 88%;
     --input: 220 14% 88%;
-    --ring: 221 83% 53%;
+    --ring: 239 84% 67%;
 
     --radius: 0.6rem;
 
@@ -64,7 +64,7 @@
     --sidebar-accent: 220 14% 93%;
     --sidebar-accent-foreground: 220 20% 8%;
     --sidebar-border: 220 14% 88%;
-    --sidebar-ring: 221 83% 53%;
+    --sidebar-ring: 239 84% 67%;
   }
 
   .dark {
