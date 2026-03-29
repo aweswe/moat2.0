@@ -81,7 +81,7 @@ When `AGENTTRACE_GOVERNANCE_LEVEL` is set to `governance`:
 
 ### 1. Install the SDK
 ```bash
-pip install agenttrace  # Coming soon to PyPI
+pip install agenttrace-py
 ```
 
 ### 2. Initialize and Run

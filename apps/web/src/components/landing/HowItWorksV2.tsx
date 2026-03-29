@@ -9,7 +9,7 @@ const STEPS = [
     number: "01",
     title: "Install. One line.",
     description: "Add AgentTrace to your project with pip or npm. Zero config required.",
-    code: `pip install agenttrace
+    code: `pip install agenttrace-py
 
 # Python
 from agenttrace import trace

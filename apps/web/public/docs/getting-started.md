@@ -16,7 +16,7 @@ This guide gets you to a working trace in under 5 minutes.
 ## 1. Install the SDK
 
 ```bash
-pip install agenttrace
+pip install agenttrace-py
 ```
 
 The SDK has no mandatory dependencies beyond the standard library. `requests` is used for trace upload and is included automatically.

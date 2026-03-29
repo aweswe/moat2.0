@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Check, Zap } from "lucide-react";
 
 const sdks = [
-    { name: "Python SDK", tag: "pip install agenttrace", status: "stable" },
+    { name: "Python SDK", tag: "pip install agenttrace-py", status: "stable" },
     { name: "Node.js SDK", tag: "npm install agenttrace", status: "stable" },
     { name: "REST API", tag: "POST /api/trace/register", status: "stable" },
 ];

@@ -7,7 +7,7 @@ Stop guessing why your agents crash in production. AgentTrace records every LLM 
 ## Installation
 
 ```bash
-pip install agenttrace
+pip install agenttrace-py
 ```
 
 ## Quick Start (The "Thin" SDK)

@@ -17,7 +17,7 @@ When developing autonomous AI agents, debugging is incredibly hard because they 
 The system is divided into three main components:
 
 ### 1. The Python SDK (`packages/python-sdk/`)
-This is what the user installs into their agent code (`pip install agenttrace`). 
+This is what the user installs into their agent code (`pip install agenttrace-py`). 
 - **Interceptor Pattern:** It monkey-patches standard libraries (`urllib3`, `urllib.request`, `random`, `time`) to intercept and record side-effects.
 - **Record Mode:** Captures inputs, outputs, and side-effects as "Events" and syncs them to our backend.
 - **Replay Mode:** Intercepts outgoing calls and returns the *recorded* responses instead of hitting the real network, enforcing deterministic execution.
